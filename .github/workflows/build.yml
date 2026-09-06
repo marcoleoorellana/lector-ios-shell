@@ -8,7 +8,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - run: brew install ldid
+      - run: brew install ldid-procursus
       - run: bash build-shell.sh "${{ github.run_number }}"
       - uses: actions/upload-artifact@v4
         with:
