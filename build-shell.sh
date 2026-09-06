@@ -17,7 +17,7 @@ otool -l "$APP/Lector" | grep -A4 'LC_BUILD_VERSION\|LC_VERSION_MIN_IPHONEOS' | 
 otool -l "$APP/Lector" | grep -q 'platform 2\|LC_VERSION_MIN_IPHONEOS' || { echo "ERROR: el binario no es de iOS"; exit 1; }
 
 sed "s/BUILD_NUMBER/$BUILD/" Info.plist > "$APP/Info.plist"
-ldid -S entitlements.plist "$APP/Lector"
+ldid -Sentitlements.plist -Icom.marcoleoorellana.lector "$APP/Lector"
 ldid -e "$APP/Lector" | head -12
 (cd out && zip -qr ../Lector-shell.zip Lector.app)
 ls -la Lector-shell.zip
