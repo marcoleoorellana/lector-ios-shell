@@ -9,7 +9,7 @@
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Lector</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>CFBundleVersion</key><string>BUILD_NUMBER</string>
   <key>CFBundleSupportedPlatforms</key><array><string>iPhoneOS</string></array>
   <key>MinimumOSVersion</key><string>12.0</string>
@@ -30,6 +30,18 @@
     <key>CFBundleIconFiles</key><array><string>AppIcon76x76</string></array>
     <key>UIPrerenderedIcon</key><true/>
   </dict></dict>
+  <key>UIAppFonts</key>
+  <array>
+    <string>fonts/Figtree-Regular.ttf</string>
+    <string>fonts/Figtree-RegularItalic.ttf</string>
+    <string>fonts/Figtree-Medium.ttf</string>
+    <string>fonts/Figtree-SemiBold.ttf</string>
+    <string>fonts/Figtree-SemiBoldItalic.ttf</string>
+    <string>fonts/Figtree-Bold.ttf</string>
+    <string>fonts/Figtree-BoldItalic.ttf</string>
+  </array>
+  <key>NSFaceIDUsageDescription</key><string>Desbloquear Lector</string>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
   <key>UILaunchImages</key>
   <array>
     <dict>
