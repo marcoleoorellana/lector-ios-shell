@@ -64,6 +64,11 @@ final class Settings {
         get { let v = d.double(forKey: "fontSize"); return v > 0 ? v : 19 }
         set { d.set(min(max(newValue, 14), 30), forKey: "fontSize") }
     }
+    /// Interlineado (multiplicador). Docs usa 1.15; en pantalla 1.35 lee mejor.
+    var lineHeight: Double {
+        get { let v = d.double(forKey: "lineHeight"); return v > 0 ? v : 1.35 }
+        set { d.set(min(max(newValue, 1.1), 1.9), forKey: "lineHeight") }
+    }
     var preachFontSize: Double {
         get { let v = d.double(forKey: "preachFontSize"); return v > 0 ? v : 27 }
         set { d.set(min(max(newValue, 20), 40), forKey: "preachFontSize") }

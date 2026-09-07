@@ -169,7 +169,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     @objc private func showTypography() {
         let vc = TypographyViewController { [weak self] in self?.pushCSSVars() }
         vc.modalPresentationStyle = .popover
-        vc.preferredContentSize = CGSize(width: 320, height: 190)
+        vc.preferredContentSize = CGSize(width: 320, height: 250)
         vc.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItems?.last
         vc.popoverPresentationController?.delegate = self
         vc.popoverPresentationController?.backgroundColor = pal.bg
@@ -183,6 +183,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 final class TypographyViewController: UIViewController {
     private let onChange: () -> Void
     private let sizeLabel = UILabel()
+    private let lhLabel = UILabel()
     init(onChange: @escaping () -> Void) { self.onChange = onChange; super.init(nibName: nil, bundle: nil) }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -200,12 +201,22 @@ final class TypographyViewController: UIViewController {
         let sizeRow = UIStackView(arrangedSubviews: [smaller, sizeLabel, bigger]); sizeRow.axis = .horizontal; sizeRow.distribution = .fillEqually; sizeRow.spacing = 12
         sizeRow.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
+        let lhSmaller = UIButton(type: .system), lhBigger = UIButton(type: .system)
+        lhSmaller.setTitle("≡", for: .normal); lhSmaller.titleLabel?.font = UIFont.systemFont(ofSize: 15)
+        lhBigger.setTitle("≡", for: .normal); lhBigger.titleLabel?.font = UIFont.systemFont(ofSize: 24)
+        for b in [lhSmaller, lhBigger] { b.tintColor = pal.text; b.layer.borderWidth = 1; b.layer.borderColor = pal.hairline.cgColor; b.layer.cornerRadius = 8 }
+        lhSmaller.addTarget(self, action: #selector(lhDec), for: .touchUpInside)
+        lhBigger.addTarget(self, action: #selector(lhInc), for: .touchUpInside)
+        lhLabel.font = Fonts.mono(13); lhLabel.textColor = pal.secondary; lhLabel.textAlignment = .center
+        let lhRow = UIStackView(arrangedSubviews: [lhSmaller, lhLabel, lhBigger]); lhRow.axis = .horizontal; lhRow.distribution = .fillEqually; lhRow.spacing = 12
+        lhRow.heightAnchor.constraint(equalToConstant: 44).isActive = true
+
         let seg = UISegmentedControl(items: ["Claro", "Sepia", "Oscuro"])
         seg.selectedSegmentIndex = [ThemeMode.light, .sepia, .dark].firstIndex(of: Settings.shared.theme) ?? 0
         seg.tintColor = pal.text
         seg.addTarget(self, action: #selector(themeChanged(_:)), for: .valueChanged)
 
-        let stack = UIStackView(arrangedSubviews: [sizeRow, seg]); stack.axis = .vertical; stack.spacing = 20
+        let stack = UIStackView(arrangedSubviews: [sizeRow, lhRow, seg]); stack.axis = .vertical; stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -215,7 +226,9 @@ final class TypographyViewController: UIViewController {
         ])
         refresh()
     }
-    private func refresh() { sizeLabel.text = "\(Int(Settings.shared.fontSize)) px" }
+    private func refresh() { sizeLabel.text = "\(Int(Settings.shared.fontSize)) px"; lhLabel.text = String(format: "interlineado %.2f", Settings.shared.lineHeight) }
+    @objc private func lhDec() { Settings.shared.lineHeight -= 0.05; refresh(); onChange() }
+    @objc private func lhInc() { Settings.shared.lineHeight += 0.05; refresh(); onChange() }
     @objc private func dec() { Settings.shared.fontSize -= 1; refresh(); onChange() }
     @objc private func inc() { Settings.shared.fontSize += 1; refresh(); onChange() }
     @objc private func themeChanged(_ s: UISegmentedControl) {
@@ -242,7 +255,7 @@ enum ReaderHTML {
         let alpha = preach ? 0.55 : 0.35
         return """
         (function(){var r=document.documentElement.style;
-        r.setProperty('--fs','\(base)px');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
+        r.setProperty('--fs','\(base)px');r.setProperty('--lh','\(s.lineHeight)');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
         r.setProperty('--muted','\(pal.secondaryHex)');r.setProperty('--line','\(pal.hairlineHex)');r.setProperty('--tint','\(alpha)');})();
         """
     }
@@ -268,13 +281,13 @@ enum ReaderHTML {
         @font-face{font-family:Figtree;src:url('fonts/Figtree-SemiBoldItalic.ttf');font-weight:600;font-style:italic}
         @font-face{font-family:Figtree;src:url('fonts/Figtree-Bold.ttf');font-weight:700;font-style:normal}
         @font-face{font-family:Figtree;src:url('fonts/Figtree-BoldItalic.ttf');font-weight:700;font-style:italic}
-        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.55 : 0.35)}
+        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.55 : 0.35)}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
-        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
         article{max-width:640px;margin:0 auto;padding:0 32px}
         body.preach article{max-width:720px}
-        p{margin:0 0 .6em}
-        p:empty,p.is-section-break{margin:0;height:.6em}
+        p{margin:0 0 .55em}
+        p:empty,p.is-section-break{margin:0;height:.35em}
         li{margin:0 0 .15em}
         li>p{margin:0}
         ul,ol{margin:.2em 0 .6em;padding-left:1.25em}
@@ -284,10 +297,13 @@ enum ReaderHTML {
         table{border-collapse:collapse;width:100%;font-size:.9em}
         td,th{border:1px solid var(--line);padding:.4em .6em;vertical-align:top}
         blockquote{margin:1em 0;padding-left:20px;border-left:2px solid var(--fg);color:var(--muted)}
-        h1,h2,h3,h4,h5,h6,p.doc-subtitle{margin:1.1em 0 .4em;line-height:1.25;color:var(--fg)}
+        h1,h2,h3,h4,h5,h6,p.doc-subtitle{margin:.9em 0 .3em;line-height:1.25;color:var(--fg)}
+        h5,h6,h6.heading-6{margin:.6em 0 .25em}
         h1:first-child{margin-top:0}
+        h1+p.doc-subtitle,p.is-section-break+p.doc-subtitle,p.is-section-break+h2,p.is-section-break+h3,p.is-section-break+h4{margin-top:.3em}
+        h2+h3,h3+h4,h4+h5,h5+h6,h6+h6,h5+h5,h4+h4,h3+h3,h6+h5,h5+h4,h4+h3,p.doc-subtitle+h5,p.doc-subtitle+h6,p.doc-subtitle+h4{margin-top:.25em}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
-        p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))color:var(--muted)}
+        p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))}
         h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))padding-left:14px;border-left:4px solid #434343}
         h3{font-size:\(em("HEADING_2", 16));\(deco("HEADING_2", bold: true, italic: false, underline: false))}
         h4{font-size:\(em("HEADING_3", 14));\(deco("HEADING_3", bold: true, italic: true, underline: false))}

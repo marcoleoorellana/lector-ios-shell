@@ -3,7 +3,7 @@ import UIKit
 final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     private var pal: Palette { return Settings.shared.palette }
     private let sections: [(String, [String])] = [
-        ("Lectura", ["Tamaño del texto", "Tema"]),
+        ("Lectura", ["Tamaño del texto", "Interlineado", "Tema"]),
         ("Predicación", ["Tamaño en predicación"]),
         ("Contenido", ["Origen (URL)", "Actualizar ahora"]),
         ("Seguridad", ["PIN al abrir", "Touch ID", "Cambiar PIN"]),
@@ -52,6 +52,8 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         switch name {
         case "Tamaño del texto":
             cell.accessoryView = slider(value: Float(s.fontSize), min: 14, max: 30, action: #selector(fontSizeChanged(_:)))
+        case "Interlineado":
+            cell.accessoryView = slider(value: Float(s.lineHeight), min: 1.1, max: 1.9, action: #selector(lineHeightChanged(_:)))
         case "Tamaño en predicación":
             cell.accessoryView = slider(value: Float(s.preachFontSize), min: 20, max: 40, action: #selector(preachSizeChanged(_:)))
         case "Tema":
@@ -123,6 +125,7 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     }
 
     @objc private func fontSizeChanged(_ s: UISlider) { Settings.shared.fontSize = Double(s.value.rounded()) }
+    @objc private func lineHeightChanged(_ s: UISlider) { Settings.shared.lineHeight = Double((s.value * 20).rounded() / 20) }
     @objc private func preachSizeChanged(_ s: UISlider) { Settings.shared.preachFontSize = Double(s.value.rounded()) }
     @objc private func themeChanged(_ s: UISegmentedControl) { Settings.shared.theme = [ThemeMode.light, .sepia, .dark][s.selectedSegmentIndex] }
     @objc private func pinToggled(_ s: UISwitch) { Settings.shared.pinEnabled = s.isOn }
