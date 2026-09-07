@@ -13,6 +13,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     private var timer: Timer?
     private let started = Date()
     private var preaching = false
+    private var preachStarted = Date.distantPast
     private var torndown = false
     /// El primer reporte del bridge llega con scrollY=0 y pisaría el progreso guardado: se ignora hasta que restauramos o el usuario toca.
     private var ignoreProgressUntil = Date.distantPast
@@ -58,6 +59,9 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
         preachLabel.font = Fonts.mono(13); preachLabel.alpha = 0
         preachLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Tocar la etiqueta de la esquina también sale de predicación (el doble toque no es obvio).
+        preachLabel.isUserInteractionEnabled = true
+        preachLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(togglePreach)))
         view.addSubview(preachLabel)
         NSLayoutConstraint.activate([
             preachLabel.topAnchor.constraint(equalTo: progressTrack.bottomAnchor, constant: 12),
@@ -159,7 +163,9 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         let pct = "\(Int(progress * 100))%"
         statusLabel.text = "\(clock) · \(pct)"
         statusLabel.sizeToFit()
-        preachLabel.text = "PREDICACIÓN · \(clock) · \(pct)"
+        // Los primeros 10 s de predicación se indica cómo salir; después queda solo el reloj.
+        let hint = (preaching && Date().timeIntervalSince(preachStarted) < 10) ? " · DOBLE TOQUE O TOCÁ ACÁ PARA SALIR" : ""
+        preachLabel.text = "PREDICACIÓN · \(clock) · \(pct)\(hint)"
         let w = progressTrack.bounds.width * CGFloat(progress)
         progressFill.frame = CGRect(x: 0, y: 0, width: w, height: 2)
     }
@@ -183,6 +189,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
     @objc private func togglePreach() {
         preaching.toggle()
+        if preaching { preachStarted = Date() }
+        updateStatus()
         navigationController?.setNavigationBarHidden(preaching, animated: true)
         UIView.animate(withDuration: 0.2) { self.preachLabel.alpha = self.preaching ? 1 : 0 }
         setNeedsStatusBarAppearanceUpdate()
