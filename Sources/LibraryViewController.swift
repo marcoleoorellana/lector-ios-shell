@@ -83,6 +83,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        navigationController?.navigationBar.prefersLargeTitles = true
         applyTheme()
         updateContinue()
         tableView.reloadData()

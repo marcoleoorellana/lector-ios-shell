@@ -68,9 +68,14 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
     deinit { timer?.invalidate(); webView?.configuration.userContentController.removeScriptMessageHandler(forName: "lector") }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.navigationBar.prefersLargeTitles = false
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        if isMovingFromParent { exitPreachIfNeeded() }
+        if isMovingFromParent { exitPreachIfNeeded(); navigationController?.navigationBar.prefersLargeTitles = true }
     }
 
     override var prefersStatusBarHidden: Bool { return preaching }
@@ -245,7 +250,10 @@ enum ReaderHTML {
         let pal = s.palette
         let normal = pt(styles, "NORMAL_TEXT", 11)
         // Escala: el texto normal de Docs (en pt) se ve a --fs px; los encabezados mantienen la proporción de Docs.
-        func em(_ key: String, _ fb: Double) -> String { return String(format: "%.3fem", pt(styles, key, fb) / normal) }
+        func em(_ key: String, _ fb: Double) -> String {
+            let ratio = pt(styles, key, fb) / normal
+            return String(format: "%.3fem", 1 + (ratio - 1) * 0.55)
+        }
         func deco(_ key: String, bold: Bool, italic: Bool, underline: Bool) -> String {
             let b = flag(styles, key, "bold", bold), i = flag(styles, key, "italic", italic), u = flag(styles, key, "underline", underline)
             return "font-weight:\(b ? 700 : 400);font-style:\(i ? "italic" : "normal");text-decoration:\(u ? "underline" : "none");"
