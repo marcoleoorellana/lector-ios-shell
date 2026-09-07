@@ -43,7 +43,21 @@ enum Fonts {
     }
 
     static func mono(_ size: CGFloat) -> UIFont {
-        return UIFont.monospacedDigitSystemFont(ofSize: size, weight: .regular)
+        return UIFont(name: "Menlo-Regular", size: size) ?? UIFont.monospacedDigitSystemFont(ofSize: size, weight: .regular)
+    }
+
+    /// Figtree con numerales tabulares si la fuente los trae (feature 6/0 de SFNTLayoutTypes: number spacing / monospaced).
+    static func tabular(_ size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        let base = ui(size, weight: weight)
+        let feature: [UIFontDescriptor.FeatureKey: Int] = [.featureIdentifier: 6, .typeIdentifier: 0]
+        let d = base.fontDescriptor.addingAttributes([.featureSettings: [feature]])
+        return UIFont(descriptor: d, size: size)
+    }
+
+    /// Tracking 0.06 em para los textos en mayúsculas (ver DESIGN.md).
+    static func tracked(_ label: UILabel, _ text: String) {
+        let size = label.font?.pointSize ?? 12
+        label.attributedText = NSAttributedString(string: text, attributes: [.kern: size * 0.06])
     }
 }
 
@@ -62,16 +76,19 @@ final class Settings {
     /// Tamaño base del texto en px (el resto escala proporcional a Docs).
     var fontSize: Double {
         get { let v = d.double(forKey: "fontSize"); return v > 0 ? v : 19 }
-        set { d.set(min(max(newValue, 14), 30), forKey: "fontSize") }
+        set { d.set(min(max(newValue, 14), 30), forKey: "fontSize"); Settings.postTypography() }
     }
     /// Interlineado (multiplicador). Docs usa 1.15; en pantalla 1.35 lee mejor.
     var lineHeight: Double {
         get { let v = d.double(forKey: "lineHeight"); return v > 0 ? v : 1.35 }
-        set { d.set(min(max(newValue, 1.1), 1.9), forKey: "lineHeight") }
+        set { d.set(min(max(newValue, 1.1), 1.9), forKey: "lineHeight"); Settings.postTypography() }
     }
     var preachFontSize: Double {
         get { let v = d.double(forKey: "preachFontSize"); return v > 0 ? v : 27 }
-        set { d.set(min(max(newValue, 20), 40), forKey: "preachFontSize") }
+        set { d.set(min(max(newValue, 20), 40), forKey: "preachFontSize"); Settings.postTypography() }
+    }
+    private static func postTypography() {
+        NotificationCenter.default.post(name: .typographyChanged, object: nil)
     }
     var pinEnabled: Bool {
         get { return d.object(forKey: "pinEnabled") == nil ? true : d.bool(forKey: "pinEnabled") }
@@ -102,5 +119,6 @@ final class Settings {
 
 extension Notification.Name {
     static let themeChanged = Notification.Name("lector.themeChanged")
+    static let typographyChanged = Notification.Name("lector.typographyChanged")
     static let contentChanged = Notification.Name("lector.contentChanged")
 }

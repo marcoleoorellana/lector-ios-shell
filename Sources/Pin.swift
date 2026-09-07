@@ -18,6 +18,9 @@ final class PinViewController: UIViewController {
     private let onDone: () -> Void
     private var entered = ""
     private var firstEntry: String?
+    private var wrongTries = 0
+    private var lockedUntil: Date?
+    private var isLocked: Bool { if let u = lockedUntil, Date() < u { return true }; return false }
     private let dots = UIStackView()
     private let subtitle = UILabel()
     private var pal: Palette { return Settings.shared.palette }
@@ -111,7 +114,7 @@ final class PinViewController: UIViewController {
     }
 
     @objc private func digit(_ sender: UIButton) {
-        guard entered.count < 6, let t = sender.title(for: .normal) else { return }
+        guard !isLocked, entered.count < 6, let t = sender.title(for: .normal) else { return }
         entered += t; renderDots()
         if entered.count == 6 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.submit() } }
     }
@@ -121,7 +124,13 @@ final class PinViewController: UIViewController {
     private func submit() {
         switch mode {
         case .unlock:
-            if Pin.hash(entered) == Settings.shared.pinHash { finish() } else { reject("PIN incorrecto") }
+            guard !isLocked else { entered = ""; renderDots(); return }
+            if Pin.hash(entered) == Settings.shared.pinHash {
+                wrongTries = 0; finish()
+            } else {
+                wrongTries += 1
+                if wrongTries >= 5 { startCooldown() } else { reject("PIN incorrecto") }
+            }
         case .set:
             if let first = firstEntry {
                 if first == entered {
@@ -131,6 +140,18 @@ final class PinViewController: UIViewController {
             } else {
                 firstEntry = entered; entered = ""; renderDots(); subtitle.text = "Repetí el PIN"
             }
+        }
+    }
+
+    /// Cinco fallos seguidos: 30 s sin aceptar nada (teclado y Touch ID).
+    private func startCooldown() {
+        wrongTries = 0
+        lockedUntil = Date().addingTimeInterval(30)
+        reject("Esperá 30 s")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+            guard let self = self else { return }
+            self.lockedUntil = nil
+            self.subtitle.text = "Ingresá el PIN"
         }
     }
 
@@ -148,7 +169,7 @@ final class PinViewController: UIViewController {
     }
 
     @objc private func tryBiometrics() {
-        guard mode == .unlock else { return }
+        guard mode == .unlock, !isLocked else { return }
         let ctx = LAContext()
         var err: NSError?
         guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err) else { return }

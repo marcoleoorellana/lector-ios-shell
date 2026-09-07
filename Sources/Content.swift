@@ -42,9 +42,15 @@ final class ContentStore {
 
     private func existing(_ url: URL) -> URL? { return fm.fileExists(atPath: url.path) ? url : nil }
 
+    /// Un `path` de docs.json solo puede apuntar dentro de content/docs/ (el manifiesto puede venir de la red).
+    private func safe(_ path: String) -> Bool {
+        return path.hasPrefix("docs/") && !path.hasPrefix("/") && !path.contains("..")
+    }
+
     func doc(id: String) -> Doc? { return docs.first { $0.id == id } }
 
     func html(for doc: Doc) -> String {
+        guard safe(doc.path) else { return "<p>No se pudo abrir el documento.</p>" }
         let url = existing(syncDir.appendingPathComponent(doc.path)) ?? bundleDir.appendingPathComponent(doc.path)
         return (try? String(contentsOf: url, encoding: .utf8)) ?? "<p>No se pudo abrir el documento.</p>"
     }
@@ -66,43 +72,54 @@ final class ContentStore {
         let session = URLSession(configuration: .ephemeral)
         var req = URLRequest(url: baseURL.appendingPathComponent("docs.json"))
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        session.dataTask(with: req) { data, _, error in
-            guard let data = data, let remote = try? JSONDecoder().decode([Doc].self, from: data) else {
-                DispatchQueue.main.async { completion(.failure(error ?? NSError(domain: "lector", code: 2, userInfo: [NSLocalizedDescriptionKey: "docs.json inválido"]))) }
+        session.dataTask(with: req) { data, resp, error in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            guard code == 200, let data = data, let remote = try? JSONDecoder().decode([Doc].self, from: data) else {
+                let fallback = NSError(domain: "lector", code: 2, userInfo: [NSLocalizedDescriptionKey: code == 200 || code == 0 ? "docs.json inválido" : "docs.json: HTTP \(code)"])
+                DispatchQueue.main.async { completion(.failure(error ?? fallback)) }
                 return
             }
-            let known = Dictionary(uniqueKeysWithValues: self.docs.map { ($0.id, $0) })
-            let changed = remote.filter { d in
-                guard let k = known[d.id] else { return true }
-                return k.modifiedTime != d.modifiedTime || !self.fm.fileExists(atPath: self.syncDir.appendingPathComponent(d.path).path)
-            }
-            let group = DispatchGroup()
-            var failures = 0
-            for d in changed {
+            // El manifiesto es remoto: ids repetidos no pueden reventar la app, y los path se validan antes de escribir.
+            DispatchQueue.main.async {
+                let known = Dictionary(self.docs.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
+                let changed = remote.filter { d in
+                    guard self.safe(d.path) else { return false }
+                    guard let k = known[d.id] else { return true }
+                    return k.modifiedTime != d.modifiedTime || !self.fm.fileExists(atPath: self.syncDir.appendingPathComponent(d.path).path)
+                }
+                let group = DispatchGroup()
+                let counter = DispatchQueue(label: "lector.sync.counter")
+                var failures = 0
+                for d in changed {
+                    group.enter()
+                    session.dataTask(with: baseURL.appendingPathComponent(d.path)) { html, hResp, _ in
+                        let ok = ((hResp as? HTTPURLResponse)?.statusCode ?? 0) == 200
+                        if ok, let html = html {
+                            let dest = self.syncDir.appendingPathComponent(d.path)
+                            try? self.fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                            try? html.write(to: dest)
+                        } else { counter.sync { failures += 1 } }
+                        group.leave()
+                    }.resume()
+                }
                 group.enter()
-                session.dataTask(with: baseURL.appendingPathComponent(d.path)) { html, _, _ in
-                    if let html = html {
-                        let dest = self.syncDir.appendingPathComponent(d.path)
-                        try? self.fm.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-                        try? html.write(to: dest)
-                    } else { failures += 1 }
+                session.dataTask(with: baseURL.appendingPathComponent("styles.json")) { s, sResp, _ in
+                    if ((sResp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let s = s {
+                        try? s.write(to: self.syncDir.appendingPathComponent("styles.json"))
+                    }
                     group.leave()
                 }.resume()
-            }
-            group.enter()
-            session.dataTask(with: baseURL.appendingPathComponent("styles.json")) { s, _, _ in
-                if let s = s { try? s.write(to: self.syncDir.appendingPathComponent("styles.json")) }
-                group.leave()
-            }.resume()
-            group.notify(queue: .main) {
-                if failures == 0 {
-                    try? data.write(to: self.syncDir.appendingPathComponent("docs.json"))
-                    Settings.shared.lastSync = Date()
-                    self.load()
-                    NotificationCenter.default.post(name: .contentChanged, object: nil)
-                    completion(.success(changed.count))
-                } else {
-                    completion(.failure(NSError(domain: "lector", code: 3, userInfo: [NSLocalizedDescriptionKey: "\(failures) documento(s) no se pudieron bajar"])))
+                group.notify(queue: .main) {
+                    let failed = counter.sync { failures }
+                    if failed == 0 {
+                        try? data.write(to: self.syncDir.appendingPathComponent("docs.json"))
+                        Settings.shared.lastSync = Date()
+                        self.load()
+                        NotificationCenter.default.post(name: .contentChanged, object: nil)
+                        completion(.success(changed.count))
+                    } else {
+                        completion(.failure(NSError(domain: "lector", code: 3, userInfo: [NSLocalizedDescriptionKey: "\(failed) documento(s) no se pudieron bajar"])))
+                    }
                 }
             }
         }.resume()

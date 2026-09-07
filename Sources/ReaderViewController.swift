@@ -13,6 +13,10 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     private var timer: Timer?
     private let started = Date()
     private var preaching = false
+    private var torndown = false
+    /// El primer reporte del bridge llega con scrollY=0 y pisaría el progreso guardado: se ignora hasta que restauramos o el usuario toca.
+    private var ignoreProgressUntil = Date.distantPast
+    private var userInteracted = false
     var debugPreach = false
     private var pal: Palette { return Settings.shared.palette }
 
@@ -61,22 +65,39 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         ])
 
         NotificationCenter.default.addObserver(self, selector: #selector(applyTheme), name: .themeChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(pushCSSVars), name: .typographyChanged, object: nil)
+        progress = ContentStore.shared.progress(for: doc.id)
         applyTheme()
+        ignoreProgressUntil = Date().addingTimeInterval(0.8)
         load()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateStatus() }
     }
 
-    deinit { timer?.invalidate(); webView?.configuration.userContentController.removeScriptMessageHandler(forName: "lector") }
+    /// El userContentController retiene al handler: hay que soltarlo al salir, no solo en deinit.
+    private func teardown() {
+        guard !torndown else { return }
+        torndown = true
+        timer?.invalidate(); timer = nil
+        webView?.stopLoading()
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "lector")
+    }
+
+    deinit { teardown() }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.navigationBar.prefersLargeTitles = false
         navigationController?.navigationBar.sizeToFit()
+        pushCSSVars()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        if isMovingFromParent { exitPreachIfNeeded(); navigationController?.navigationBar.prefersLargeTitles = true }
+        if isMovingFromParent || isBeingDismissed {
+            exitPreachIfNeeded()
+            navigationController?.navigationBar.prefersLargeTitles = true
+            teardown()
+        }
     }
 
     override var prefersStatusBarHidden: Bool { return preaching }
@@ -91,7 +112,9 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if debugPreach && !preaching { debugPreach = false; togglePreach() }
         let p = ContentStore.shared.progress(for: doc.id)
-        if p > 0.01 && p < 0.97 { webView.evaluateJavaScript("window.__lectorRestore(\(p))", completionHandler: nil) }
+        // También se restaura el final (p ≥ 0.97): un doc terminado se abre donde quedó, no arriba.
+        ignoreProgressUntil = Date().addingTimeInterval(0.8)
+        if p > 0.01 { webView.evaluateJavaScript("window.__lectorRestore(\(p))", completionHandler: nil) }
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
@@ -108,6 +131,11 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         switch type {
         case "progress":
+            if (body["touched"] as? Bool) == true { userInteracted = true }
+            // Sin interacción: ni el reporte inicial ni un doc más corto que el viewport pueden tocar el progreso.
+            guard userInteracted || Date() >= ignoreProgressUntil else { return }
+            let maxScroll = (body["max"] as? Double) ?? 1
+            guard maxScroll > 0 || userInteracted else { return }
             progress = (body["p"] as? Double) ?? 0
             ContentStore.shared.setProgress(progress, for: doc.id)
             updateStatus()
@@ -147,7 +175,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     }
 
     /// Cambios en vivo sin recargar: variables CSS.
-    private func pushCSSVars() {
+    @objc private func pushCSSVars() {
         let s = Settings.shared
         let js = ReaderHTML.cssVarsJS(settings: s, preach: preaching)
         webView?.evaluateJavaScript(js, completionHandler: nil)
@@ -249,6 +277,28 @@ enum ReaderHTML {
         return (styles[key]?[name] as? Bool) ?? fallback
     }
 
+    /// Las fuentes van embebidas como data URI: con `loadHTMLString` + baseURL file:// el WKWebView no puede leer subrecursos.
+    /// Se arma una sola vez (≈190 KB de base64) y se reusa en cada documento.
+    static let fontFaces: String = {
+        let faces: [(String, Int, String)] = [
+            ("Figtree-Regular", 400, "normal"),
+            ("Figtree-RegularItalic", 400, "italic"),
+            ("Figtree-Medium", 500, "normal"),
+            ("Figtree-SemiBold", 600, "normal"),
+            ("Figtree-SemiBoldItalic", 600, "italic"),
+            ("Figtree-Bold", 700, "normal"),
+            ("Figtree-BoldItalic", 700, "italic")
+        ]
+        var out = ""
+        for (file, weight, style) in faces {
+            guard let dir = Bundle.main.resourceURL,
+                  let data = try? Data(contentsOf: dir.appendingPathComponent("fonts/\(file).ttf")) else { continue }
+            out += "@font-face{font-family:Figtree;font-weight:\(weight);font-style:\(style);font-display:swap;"
+            out += "src:url(data:font/ttf;base64,\(data.base64EncodedString())) format('truetype')}\n"
+        }
+        return out
+    }()
+
     static func cssVarsJS(settings s: Settings, preach: Bool) -> String {
         let pal = s.palette
         let base = preach ? s.preachFontSize : s.fontSize
@@ -274,16 +324,10 @@ enum ReaderHTML {
         }
         let dark = s.theme == .dark
         let css = """
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-Regular.ttf');font-weight:400;font-style:normal}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-RegularItalic.ttf');font-weight:400;font-style:italic}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-Medium.ttf');font-weight:500;font-style:normal}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-SemiBold.ttf');font-weight:600;font-style:normal}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-SemiBoldItalic.ttf');font-weight:600;font-style:italic}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-Bold.ttf');font-weight:700;font-style:normal}
-        @font-face{font-family:Figtree;src:url('fonts/Figtree-BoldItalic.ttf');font-weight:700;font-style:italic}
+        \(fontFaces)
         :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.55 : 0.35)}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
-        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-hyphens:auto;hyphens:auto}
         article{max-width:640px;margin:0 auto;padding:0 32px}
         body.preach article{max-width:720px}
         p{margin:0 0 .55em}
@@ -304,7 +348,7 @@ enum ReaderHTML {
         h2+h3,h3+h4,h4+h5,h5+h6,h6+h6,h5+h5,h4+h4,h3+h3,h6+h5,h5+h4,h4+h3,p.doc-subtitle+h5,p.doc-subtitle+h6,p.doc-subtitle+h4{margin-top:.25em}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
         p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))}
-        h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))padding-left:14px;border-left:4px solid #434343}
+        h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))padding-left:14px;border-left:4px solid var(--muted)}
         h3{font-size:\(em("HEADING_2", 16));\(deco("HEADING_2", bold: true, italic: false, underline: false))}
         h4{font-size:\(em("HEADING_3", 14));\(deco("HEADING_3", bold: true, italic: true, underline: false))}
         h5{font-size:\(em("HEADING_4", 12));\(deco("HEADING_4", bold: false, italic: true, underline: false))}
@@ -316,7 +360,7 @@ enum ReaderHTML {
         mark.tone-cyan{background:rgba(189,247,255,var(--tint));box-shadow:inset 0 -2px 0 #7fd4e0}
         mark.tone-lime{background:rgba(221,255,116,var(--tint));box-shadow:inset 0 -2px 0 #b5d94a}
         mark.tone-lavender{background:rgba(217,216,255,var(--tint));box-shadow:inset 0 -2px 0 #a9a7e6}
-        mark.tone-subtitle,mark.tone-peach{background:rgba(243,215,182,var(--tint));box-shadow:inset 0 -2px 0 #dcb083}
+        mark.tone-subtitle,mark.tone-peach{background:rgba(255,226,191,var(--tint));box-shadow:inset 0 -2px 0 #e6b98a}
         mark.tone-pink{background:rgba(255,210,216,var(--tint));box-shadow:inset 0 -2px 0 #e59aa5}
         mark.tone-title{background:rgba(203,255,215,var(--tint));box-shadow:inset 0 -2px 0 #8fdca4}
         h2 mark,h2 mark[style]{background:transparent!important;box-shadow:none}
@@ -335,7 +379,9 @@ enum ReaderHTML {
     static let bridgeJS = """
     (function(){
       var send=function(m){try{window.webkit.messageHandlers.lector.postMessage(m)}catch(e){}};
-      var t;function prog(){var h=document.documentElement;var max=h.scrollHeight-window.innerHeight;var p=max>0?window.scrollY/max:1;send({type:'progress',p:Math.max(0,Math.min(1,p))})}
+      var touched=false;
+      document.addEventListener('touchstart',function(){touched=true},{passive:true});
+      var t;function prog(){var h=document.documentElement;var max=h.scrollHeight-window.innerHeight;var p=max>0?window.scrollY/max:1;send({type:'progress',p:Math.max(0,Math.min(1,p)),max:max,touched:touched})}
       window.addEventListener('scroll',function(){clearTimeout(t);t=setTimeout(prog,150)},{passive:true});
       var last=0,pend;
       document.addEventListener('click',function(e){

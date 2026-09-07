@@ -105,7 +105,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
     }
 
     private func buildHeader() {
-        let label = UILabel(); label.text = "SEGUIR LEYENDO"; label.font = Fonts.mono(12)
+        let label = UILabel(); label.font = Fonts.mono(12); Fonts.tracked(label, "SEGUIR LEYENDO")
         continueTitle.font = Fonts.ui(22, weight: .semibold); continueTitle.numberOfLines = 2
         continueMeta.font = Fonts.mono(13)
         let button = UIButton(type: .system)

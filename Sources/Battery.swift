@@ -3,7 +3,8 @@ import UIKit
 /// Lectura exacta de batería vía IORegistry (funciona en iPad con jailbreak; sin él cae a UIDevice, 1%).
 enum Battery {
     struct Info {
-        var percent: Int
+        /// nil cuando el sistema todavía no reportó nivel (batteryLevel == -1).
+        var percent: Int?
         var charging: Bool
         var externalPower: Bool
         var currentMAh: Int?
@@ -22,7 +23,9 @@ enum Battery {
 
     static func read() -> Info {
         UIDevice.current.isBatteryMonitoringEnabled = true
-        var info = Info(percent: Int((UIDevice.current.batteryLevel * 100).rounded()),
+        // La primera lectura tras habilitar el monitoreo suele ser -1: sin dato, no 0 %.
+        let level = UIDevice.current.batteryLevel
+        var info = Info(percent: level < 0 ? nil : Int((level * 100).rounded()),
                         charging: UIDevice.current.batteryState == .charging || UIDevice.current.batteryState == .full,
                         externalPower: UIDevice.current.batteryState != .unplugged)
         guard let props = registryProps() else { return info }
@@ -52,7 +55,8 @@ enum Battery {
     private static func registryProps() -> [String: Any]? {
         for name in ["AppleSmartBattery", "AppleARMPMUCharger", "IOPMPowerSource"] {
             guard let matching = IOServiceMatching(name) else { continue }
-            let service = IOServiceGetMatchingService(0, matching.takeRetainedValue())
+            // IOServiceMatching devuelve +1 y IOServiceGetMatchingService la consume: no liberar de nuestro lado.
+            let service = IOServiceGetMatchingService(0, matching.takeUnretainedValue())
             if service == 0 { continue }
             var props: Unmanaged<CFMutableDictionary>?
             let kr = IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0)
@@ -64,7 +68,7 @@ enum Battery {
 
     static func summary() -> String {
         let b = read()
-        var parts: [String] = ["\(b.percent)%"]
+        var parts: [String] = [b.percent.map { "\($0)%" } ?? "—"]
         if let c = b.currentMAh, let m = b.maxMAh { parts.append("\(c)/\(m) mAh") }
         parts.append(b.charging ? "cargando" : (b.externalPower ? "enchufado, sin cargar" : "batería"))
         if let a = b.amperageMA { parts.append("\(a) mA") }

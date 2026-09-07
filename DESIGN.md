@@ -4,7 +4,7 @@ Sistema de diseño de la app nativa Lector (iPad Air 1, iOS 12). Minimalista al 
 
 ## Tipografía
 - **Figtree** en todo (interfaz y lectura), empaquetada en `fonts/`. Pesos: 400, 500, 600, 700 + cursivas reales.
-- Lectura: 19 px base (ajustable 14–30), interlineado 1.45, medida 640 px. Predicación: 27 px base, medida 720 px.
+- Lectura: 19 px base (ajustable 14–30), interlineado 1.35 (ajustable 1.1–1.9), medida 640 px. Predicación: 27 px base, medida 720 px.
 - Metadatos (fechas, %, cronómetro, etiquetas de sección): monoespaciada del sistema 12–13 px, numerales tabulares, mayúsculas con tracking 0.06em.
 - Jerarquía de los documentos: viene de Google Docs (`styles.json`, estilos con nombre). Tamaños en pt escalados con amortiguación (`1 + (pt/normal − 1) × 0.55`) para que el Título no ocupe media pantalla. Negrita, cursiva y subrayado se respetan tal cual.
 
@@ -16,7 +16,7 @@ Sistema de diseño de la app nativa Lector (iPad Air 1, iOS 12). Minimalista al 
 | Secundario | #666666 | #6E6558 | #A1A1A1 |
 | Líneas | #EBEBEB | #E6DFD2 | #2A2A2A |
 
-Resaltados de Docs (`mark.tone-*`): mismo tono al 35% de opacidad + subrayado de 2 px del mismo color. En predicación, 55%. Amarillo = palabra clave, cian = versículo/afirmación, lima = cita de autor, lavanda = nota, naranja = subtítulo, verde = título. El fondo gris del Encabezado 1 de Docs se convierte en una barra lateral de 4 px #434343.
+Resaltados de Docs (`mark.tone-*`): mismo tono al 35% de opacidad + subrayado de 2 px del mismo color. En predicación, 55%. Amarillo = palabra clave, cian = versículo/afirmación, lima = cita de autor, lavanda = nota, naranja/durazno = subtítulo (`#ffe2bf`, el mismo valor que usa `google-docs-lib.mjs`), verde = título. El fondo gris del Encabezado 1 de Docs se convierte en una barra lateral de 4 px en el color secundario del tema (`var(--muted)`), no un gris fijo.
 
 ## Espacio y superficies
 - Escala 4 · 8 · 12 · 16 · 24 · 32 · 48. Márgenes laterales 32. Objetivos táctiles ≥ 44.

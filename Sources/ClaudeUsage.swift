@@ -70,8 +70,16 @@ enum ClaudeAPI {
         }
     }
 
+    /// El uuid se interpola en la URL: solo hex y guiones (viene del Keychain o de la API).
+    static func validOrg(_ s: String) -> Bool {
+        return !s.isEmpty && s.count <= 64 && s.range(of: "^[0-9a-fA-F-]+$", options: .regularExpression) != nil
+    }
+
     private static func get(_ path: String, key: String, completion: @escaping (Result<Any, Error>) -> Void) {
-        var req = URLRequest(url: URL(string: "https://claude.ai/api" + path)!)
+        guard let url = URL(string: "https://claude.ai/api" + path) else {
+            completion(.failure(URLError(.badURL))); return
+        }
+        var req = URLRequest(url: url)
         req.setValue(ua, forHTTPHeaderField: "User-Agent")
         req.setValue("application/json, text/plain, */*", forHTTPHeaderField: "Accept")
         req.setValue("https://claude.ai/", forHTTPHeaderField: "Referer")
@@ -99,13 +107,13 @@ enum ClaudeAPI {
                 }
             }
         }
-        if let org = Keychain.get("claudeOrgUuid"), !org.isEmpty { usage(org: org); return }
+        if let org = Keychain.get("claudeOrgUuid"), validOrg(org) { usage(org: org); return }
         get("/organizations", key: key) { r in
             switch r {
             case .failure(let e): done(.failure(e))
             case .success(let obj):
                 guard let arr = obj as? [[String: Any]], let first = arr.first,
-                      let uuid = (first["uuid"] ?? first["id"]) as? String else { done(.failure(Err.shape)); return }
+                      let uuid = (first["uuid"] ?? first["id"]) as? String, validOrg(uuid) else { done(.failure(Err.shape)); return }
                 Keychain.set("claudeOrgUuid", uuid)
                 usage(org: uuid)
             }
@@ -152,10 +160,16 @@ enum ClaudeAPI {
 
 /// Pantalla "Claude": los límites con %, ritmo y reinicio, en el mismo lenguaje visual del Lector.
 final class ClaudeViewController: UIViewController {
+    /// Las barras son frames dentro de vistas de autolayout: se recalculan en cada layout, no una sola vez.
+    private struct Bar { let track: UIView; let fill: UIView; let marker: UIView; let limit: UsageLimit }
     private let stack = UIStackView()
     private let status = UILabel()
     private var pal: Palette { return Settings.shared.palette }
     private var timer: Timer?
+    private var bars: [Bar] = []
+    private var limits: [UsageLimit] = []
+    private var errorText: String?
+    private var updatedAt: Date?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -179,28 +193,66 @@ final class ClaudeViewController: UIViewController {
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32)
         ])
+        NotificationCenter.default.addObserver(self, selector: #selector(applyTheme), name: .themeChanged, object: nil)
         reload()
         timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in self?.reload() }
     }
     deinit { timer?.invalidate() }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        view.layoutIfNeeded()
+        for b in bars {
+            let w = b.track.bounds.width
+            b.fill.frame = CGRect(x: 0, y: 0, width: w * CGFloat((b.limit.percent ?? 0) / 100), height: 4)
+            if let e = b.limit.elapsed {
+                b.marker.frame = CGRect(x: w * CGFloat(e / 100) - 1, y: -4, width: 2, height: 12)
+            } else { b.marker.frame = .zero }
+        }
+    }
+
+    @objc private func applyTheme() {
+        view.backgroundColor = pal.bg
+        navigationController?.navigationBar.barTintColor = pal.bg
+        navigationController?.navigationBar.tintColor = pal.text
+        navigationController?.navigationBar.largeTitleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(34, weight: .bold)]
+        navigationController?.navigationBar.titleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(17, weight: .semibold)]
+        navigationController?.navigationBar.barStyle = Settings.shared.theme == .dark ? .black : .default
+        (view.subviews.first as? UIScrollView)?.refreshControl?.tintColor = pal.secondary
+        render()
+    }
+
     @objc private func reload() {
         ClaudeAPI.fetch { [weak self] r in
             guard let self = self else { return }
             (self.view.subviews.first as? UIScrollView)?.refreshControl?.endRefreshing()
-            self.stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
             switch r {
             case .failure(let e):
-                self.status.text = e.localizedDescription
-                self.stack.addArrangedSubview(self.status)
+                self.limits = []; self.errorText = e.localizedDescription
+                self.render()
                 if case ClaudeAPI.Err.noKey = e { self.askKey() }
             case .success(let limits):
-                for l in limits { self.stack.addArrangedSubview(self.row(l)) }
-                let f = DateFormatter(); f.dateFormat = "HH:mm"
-                self.status.text = "actualizado \(f.string(from: Date())) · tirá para refrescar"
-                self.stack.addArrangedSubview(self.status)
+                self.limits = limits; self.errorText = nil; self.updatedAt = Date()
+                self.render()
             }
         }
+    }
+
+    private func render() {
+        bars.removeAll()
+        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        status.textColor = pal.secondary
+        for l in limits { stack.addArrangedSubview(row(l)) }
+        if let e = errorText {
+            status.text = e
+        } else if let d = updatedAt {
+            let f = DateFormatter(); f.dateFormat = "HH:mm"
+            status.text = "actualizado \(f.string(from: d)) · tirá para refrescar"
+        } else {
+            status.text = ""
+        }
+        stack.addArrangedSubview(status)
+        view.setNeedsLayout()
     }
 
     private func color(_ t: UsageLimit.Tier) -> UIColor {
@@ -213,9 +265,13 @@ final class ClaudeViewController: UIViewController {
     }
 
     private func row(_ l: UsageLimit) -> UIView {
-        let label = UILabel(); label.text = l.label.uppercased(); label.font = Fonts.mono(12); label.textColor = pal.secondary
+        let label = UILabel(); label.font = Fonts.mono(12); label.textColor = pal.secondary
+        Fonts.tracked(label, l.label.uppercased())
         let pct = UILabel(); pct.text = l.percent.map { "\(Int($0.rounded()))%" } ?? "—"
-        pct.font = Fonts.ui(44, weight: .bold); pct.textColor = color(l.tier)
+        pct.font = Fonts.tabular(44, weight: .bold); pct.textColor = color(l.tier)
+        // Piso de ancho: si Figtree no trae numerales tabulares, el "ritmo" de al lado igual no salta.
+        pct.setContentHuggingPriority(.required, for: .horizontal)
+        pct.widthAnchor.constraint(greaterThanOrEqualToConstant: 118).isActive = true
         let pace = UILabel(); pace.text = l.paceText; pace.font = Fonts.ui(15); pace.textColor = pal.secondary
         let reset = UILabel(); reset.text = l.resetText; reset.font = Fonts.mono(13); reset.textColor = pal.secondary; reset.textAlignment = .right
         let top = UIStackView(arrangedSubviews: [pct, pace]); top.axis = .horizontal; top.alignment = .lastBaseline; top.spacing = 14
@@ -224,11 +280,7 @@ final class ClaudeViewController: UIViewController {
         let fill = UIView(); fill.backgroundColor = color(l.tier); track.addSubview(fill)
         let marker = UIView(); marker.backgroundColor = pal.text; track.addSubview(marker)
         let container = UIStackView(arrangedSubviews: [label, top, track, reset]); container.axis = .vertical; container.spacing = 8
-        DispatchQueue.main.async {
-            let w = track.bounds.width
-            fill.frame = CGRect(x: 0, y: 0, width: w * CGFloat((l.percent ?? 0) / 100), height: 4)
-            if let e = l.elapsed { marker.frame = CGRect(x: w * CGFloat(e / 100) - 1, y: -4, width: 2, height: 12) }
-        }
+        bars.append(Bar(track: track, fill: fill, marker: marker, limit: l))
         return container
     }
 
