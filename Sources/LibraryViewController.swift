@@ -88,6 +88,21 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         tableView.reloadData()
     }
 
+    private var debugOpened = false
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        // Depuración: Documents/snap.open con un id de doc abre ese documento (y snap.preach entra en predicación).
+        guard !debugOpened else { return }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let id = try? String(contentsOf: docs.appendingPathComponent("snap.open"), encoding: .utf8),
+           let doc = ContentStore.shared.doc(id: id.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            debugOpened = true
+            let r = ReaderViewController(doc: doc)
+            r.debugPreach = FileManager.default.fileExists(atPath: docs.appendingPathComponent("snap.preach").path)
+            navigationController?.pushViewController(r, animated: false)
+        }
+    }
+
     private func buildHeader() {
         let label = UILabel(); label.text = "SEGUIR LEYENDO"; label.font = Fonts.mono(12)
         continueTitle.font = Fonts.ui(22, weight: .semibold); continueTitle.numberOfLines = 2
@@ -97,6 +112,8 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         button.layer.cornerRadius = 8; button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
         button.addTarget(self, action: #selector(continueReading), for: .touchUpInside)
         button.tag = 99
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
         let texts = UIStackView(arrangedSubviews: [continueTitle, continueMeta]); texts.axis = .vertical; texts.spacing = 6
         let row = UIStackView(arrangedSubviews: [texts, button]); row.axis = .horizontal; row.alignment = .bottom; row.spacing = 24
         continueBar.translatesAutoresizingMaskIntoConstraints = false

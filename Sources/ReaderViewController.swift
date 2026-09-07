@@ -13,6 +13,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     private var timer: Timer?
     private let started = Date()
     private var preaching = false
+    var debugPreach = false
     private var pal: Palette { return Settings.shared.palette }
 
     init(doc: Doc) { self.doc = doc; super.init(nibName: nil, bundle: nil); hidesBottomBarWhenPushed = true }
@@ -82,6 +83,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if debugPreach && !preaching { debugPreach = false; togglePreach() }
         let p = ContentStore.shared.progress(for: doc.id)
         if p > 0.01 && p < 0.97 { webView.evaluateJavaScript("window.__lectorRestore(\(p))", completionHandler: nil) }
     }
