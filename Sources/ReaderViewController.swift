@@ -259,18 +259,22 @@ enum ReaderHTML {
         @font-face{font-family:Figtree;src:url('fonts/Figtree-BoldItalic.ttf');font-weight:700;font-style:italic}
         :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.55 : 0.35)}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
-        body{margin:0;padding:56px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:1.58;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
         article{max-width:640px;margin:0 auto;padding:0 32px}
         body.preach article{max-width:720px}
-        p{margin:0 0 1em}
-        li{margin:0 0 .4em}
-        ul,ol{padding-left:1.3em}
+        p{margin:0 0 .6em}
+        p:empty,p.is-section-break{margin:0;height:.6em}
+        li{margin:0 0 .15em}
+        li>p{margin:0}
+        ul,ol{margin:.2em 0 .6em;padding-left:1.25em}
+        br+br{display:none}
         a{color:var(--fg)}
         img{max-width:100%;height:auto}
         table{border-collapse:collapse;width:100%;font-size:.9em}
         td,th{border:1px solid var(--line);padding:.4em .6em;vertical-align:top}
         blockquote{margin:1em 0;padding-left:20px;border-left:2px solid var(--fg);color:var(--muted)}
-        h1,h2,h3,h4,h5,h6,p.doc-subtitle{margin:1.6em 0 .6em;line-height:1.3;color:var(--fg)}
+        h1,h2,h3,h4,h5,h6,p.doc-subtitle{margin:1.1em 0 .4em;line-height:1.25;color:var(--fg)}
+        h1:first-child{margin-top:0}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
         p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))color:var(--muted)}
         h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))padding-left:14px;border-left:4px solid #434343}

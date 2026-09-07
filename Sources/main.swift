@@ -11,9 +11,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         let nav = UINavigationController(rootViewController: LibraryViewController())
         nav.navigationBar.isTranslucent = false
         nav.navigationBar.shadowImage = UIImage()
-        nav.navigationBar.setBackgroundImage(UIImage(), for: .default)
+        nav.view.backgroundColor = Settings.shared.palette.bg
         let w = UIWindow(frame: UIScreen.main.bounds)
+        w.backgroundColor = Settings.shared.palette.bg
         w.rootViewController = nav
+        DebugSnap.start(window: w)
         w.makeKeyAndVisible()
         window = w
         lockIfNeeded()
