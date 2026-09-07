@@ -71,6 +71,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.navigationBar.prefersLargeTitles = false
+        navigationController?.navigationBar.sizeToFit()
     }
 
     override func viewWillDisappear(_ animated: Bool) {

@@ -100,7 +100,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             debugOpened = true
             let r = ReaderViewController(doc: doc)
             r.debugPreach = FileManager.default.fileExists(atPath: docs.appendingPathComponent("snap.preach").path)
-            navigationController?.pushViewController(r, animated: false)
+            navigationController?.pushViewController(r, animated: true)
         }
     }
 
