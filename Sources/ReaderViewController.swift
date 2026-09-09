@@ -44,6 +44,10 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsBackForwardNavigationGestures = false
+        // Translucido solo mientras carga, para que se vea el fondo del tema en vez de blanco.
+        // En cuanto hay contenido pasa a opaco: con la vista translucida el compositor mezcla
+        // con alfa los 3,1 MP de la pantalla Retina en cada cuadro, y en el A7 eso es lo que
+        // hace que el scroll se sienta pesado y gaste bateria de mas.
         webView.isOpaque = false
         view.addSubview(webView)
 
@@ -74,7 +78,17 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         applyTheme()
         ignoreProgressUntil = Date().addingTimeInterval(0.8)
         load()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateStatus() }
+        startTimer()
+    }
+
+    /// Leyendo alcanza con refrescar de a poco; el segundero solo hace falta como cronometro de
+    /// predicacion. A 1 Hz permanente el CPU nunca baja a reposo profundo y se nota en la bateria.
+    private func startTimer() {
+        timer?.invalidate()
+        let cada: TimeInterval = preaching ? 1 : 15
+        timer = Timer.scheduledTimer(withTimeInterval: cada, repeats: true) { [weak self] _ in self?.updateStatus() }
+        timer?.tolerance = preaching ? 0.1 : 5   // deja que el sistema agrupe despertares
+        updateStatus()
     }
 
     /// El userContentController retiene al handler: hay que soltarlo al salir, no solo en deinit.
@@ -114,6 +128,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Ya hay contenido pintado: se puede componer opaco sin riesgo de destello.
+        webView.isOpaque = true
         if debugPreach && !preaching { debugPreach = false; togglePreach() }
         let p = ContentStore.shared.progress(for: doc.id)
         // También se restaura el final (p ≥ 0.97): un doc terminado se abre donde quedó, no arriba.
@@ -159,7 +175,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
     private func updateStatus() {
         let s = Int(Date().timeIntervalSince(started))
-        let clock = String(format: "%02d:%02d", s / 60, s % 60)
+        // Predicando importa el segundo; leyendo, no: mostrar minutos permite refrescar 15x menos.
+        let clock = preaching ? String(format: "%02d:%02d", s / 60, s % 60) : "\(s / 60) min"
         let pct = "\(Int(progress * 100))%"
         statusLabel.text = "\(clock) · \(pct)"
         statusLabel.sizeToFit()
@@ -176,7 +193,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         statusLabel.textColor = pal.secondary; preachLabel.textColor = pal.secondary
         navigationController?.navigationBar.barTintColor = pal.bg
         navigationController?.navigationBar.tintColor = pal.text
-        navigationController?.navigationBar.barStyle = Settings.shared.theme == .dark ? .black : .default
+        navigationController?.navigationBar.barStyle = .default
         pushCSSVars()
     }
 
@@ -192,6 +209,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         if preaching { preachStarted = Date() }
         updateStatus()
         navigationController?.setNavigationBarHidden(preaching, animated: true)
+        startTimer()
         UIView.animate(withDuration: 0.2) { self.preachLabel.alpha = self.preaching ? 1 : 0 }
         setNeedsStatusBarAppearanceUpdate()
         webView.evaluateJavaScript("document.body.classList.toggle('preach', \(preaching))", completionHandler: nil)
@@ -247,8 +265,8 @@ final class TypographyViewController: UIViewController {
         let lhRow = UIStackView(arrangedSubviews: [lhSmaller, lhLabel, lhBigger]); lhRow.axis = .horizontal; lhRow.distribution = .fillEqually; lhRow.spacing = 12
         lhRow.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
-        let seg = UISegmentedControl(items: ["Claro", "Sepia", "Oscuro"])
-        seg.selectedSegmentIndex = [ThemeMode.light, .sepia, .dark].firstIndex(of: Settings.shared.theme) ?? 0
+        let seg = UISegmentedControl(items: ["Claro", "Sepia"])
+        seg.selectedSegmentIndex = [ThemeMode.light, .sepia].firstIndex(of: Settings.shared.theme) ?? 0
         seg.tintColor = pal.text
         seg.addTarget(self, action: #selector(themeChanged(_:)), for: .valueChanged)
 
@@ -268,7 +286,7 @@ final class TypographyViewController: UIViewController {
     @objc private func dec() { Settings.shared.fontSize -= 1; refresh(); onChange() }
     @objc private func inc() { Settings.shared.fontSize += 1; refresh(); onChange() }
     @objc private func themeChanged(_ s: UISegmentedControl) {
-        Settings.shared.theme = [ThemeMode.light, .sepia, .dark][s.selectedSegmentIndex]
+        Settings.shared.theme = [ThemeMode.light, .sepia][s.selectedSegmentIndex]
         dismiss(animated: true)
     }
 }
@@ -310,7 +328,7 @@ enum ReaderHTML {
     static func cssVarsJS(settings s: Settings, preach: Bool) -> String {
         let pal = s.palette
         let base = preach ? s.preachFontSize : s.fontSize
-        let alpha = preach ? 0.55 : 0.35
+        let alpha = preach ? 0.65 : 0.50
         return """
         (function(){var r=document.documentElement.style;
         r.setProperty('--fs','\(base)px');r.setProperty('--lh','\(s.lineHeight)');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
@@ -330,10 +348,9 @@ enum ReaderHTML {
             let b = flag(styles, key, "bold", bold), i = flag(styles, key, "italic", italic), u = flag(styles, key, "underline", underline)
             return "font-weight:\(b ? 700 : 400);font-style:\(i ? "italic" : "normal");text-decoration:\(u ? "underline" : "none");"
         }
-        let dark = s.theme == .dark
         let css = """
         \(fontFaces)
-        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.55 : 0.35)}
+        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.65 : 0.50)}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
         body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-hyphens:auto;hyphens:auto}
         article{max-width:640px;margin:0 auto;padding:0 32px}
@@ -363,17 +380,17 @@ enum ReaderHTML {
         h6{font-size:\(em("HEADING_5", 11));\(deco("HEADING_5", bold: false, italic: false, underline: false))}
         h6.heading-6{font-size:\(em("HEADING_6", 11));\(deco("HEADING_6", bold: false, italic: false, underline: false))}
         /* Resaltados de Docs: mismo tono, calmado, con subrayado del mismo color. */
+        /* Sin subrayado: en Google Docs el resaltado es solo el fondo. */
         mark{color:inherit;padding:0 2px;border-radius:2px;background:transparent}
-        mark.tone-yellow{background:rgba(255,243,155,var(--tint));box-shadow:inset 0 -2px 0 #e8d95a}
-        mark.tone-cyan{background:rgba(189,247,255,var(--tint));box-shadow:inset 0 -2px 0 #7fd4e0}
-        mark.tone-lime{background:rgba(221,255,116,var(--tint));box-shadow:inset 0 -2px 0 #b5d94a}
-        mark.tone-lavender{background:rgba(217,216,255,var(--tint));box-shadow:inset 0 -2px 0 #a9a7e6}
-        mark.tone-subtitle,mark.tone-peach{background:rgba(255,226,191,var(--tint));box-shadow:inset 0 -2px 0 #e6b98a}
-        mark.tone-pink{background:rgba(255,210,216,var(--tint));box-shadow:inset 0 -2px 0 #e59aa5}
-        mark.tone-title{background:rgba(203,255,215,var(--tint));box-shadow:inset 0 -2px 0 #8fdca4}
-        h2 mark,h2 mark[style]{background:transparent!important;box-shadow:none}
+        mark.tone-yellow{background:rgba(255,243,155,var(--tint))}
+        mark.tone-cyan{background:rgba(189,247,255,var(--tint))}
+        mark.tone-lime{background:rgba(221,255,116,var(--tint))}
+        mark.tone-lavender{background:rgba(217,216,255,var(--tint))}
+        mark.tone-subtitle,mark.tone-peach{background:rgba(255,226,191,var(--tint))}
+        mark.tone-pink{background:rgba(255,210,216,var(--tint))}
+        mark.tone-title{background:rgba(203,255,215,var(--tint))}
+        h2 mark,h2 mark[style]{background:transparent!important}
         h2 span[style],h1 span[style]{color:inherit!important}
-        \(dark ? "span[style*='color:#000000'],span[style*='color:#242323'],span[style*='color:#272727'],span[style*='color:#434343']{color:inherit!important} mark[style]{background:rgba(255,255,255,.12)!important}" : "")
         .align-center{text-align:center}
         """
         return """
