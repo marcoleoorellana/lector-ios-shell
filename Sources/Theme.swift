@@ -2,7 +2,7 @@ import UIKit
 
 // Tokens del sistema de diseño (ver DESIGN.md). Un solo acento: negro.
 enum ThemeMode: String {
-    case light, sepia, dark
+    case light, sepia
 }
 
 struct Palette {
@@ -17,9 +17,6 @@ struct Palette {
         case .sepia:
             return Palette(bg: hex(0xF7F3EA), text: hex(0x2B2620), secondary: hex(0x6E6558), hairline: hex(0xE6DFD2),
                            bgHex: "#f7f3ea", textHex: "#2b2620", secondaryHex: "#6e6558", hairlineHex: "#e6dfd2")
-        case .dark:
-            return Palette(bg: hex(0x000000), text: hex(0xEDEDED), secondary: hex(0xA1A1A1), hairline: hex(0x2A2A2A),
-                           bgHex: "#000000", textHex: "#ededed", secondaryHex: "#a1a1a1", hairlineHex: "#2a2a2a")
         }
     }
 

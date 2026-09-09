@@ -11,7 +11,11 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         ("Acerca", ["Versión"])
     ]
 
-    init() { super.init(style: .grouped) }
+    init() {
+        super.init(style: .grouped)
+        // El formSheet de iPad mide 540x620 por defecto y cortaba las ultimas secciones.
+        preferredContentSize = CGSize(width: 620, height: 820)
+    }
     required init?(coder: NSCoder) { fatalError() }
 
     override func viewDidLoad() {
@@ -57,8 +61,8 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         case "Tamaño en predicación":
             cell.accessoryView = slider(value: Float(s.preachFontSize), min: 20, max: 40, action: #selector(preachSizeChanged(_:)))
         case "Tema":
-            let seg = UISegmentedControl(items: ["Claro", "Sepia", "Oscuro"])
-            seg.selectedSegmentIndex = [ThemeMode.light, .sepia, .dark].firstIndex(of: s.theme) ?? 0
+            let seg = UISegmentedControl(items: ["Claro", "Sepia"])
+            seg.selectedSegmentIndex = [ThemeMode.light, .sepia].firstIndex(of: s.theme) ?? 0
             seg.tintColor = pal.text
             seg.addTarget(self, action: #selector(themeChanged(_:)), for: .valueChanged)
             cell.accessoryView = seg
@@ -116,7 +120,8 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     private func slider(value: Float, min: Float, max: Float, action: Selector) -> UISlider {
         let sl = UISlider(frame: CGRect(x: 0, y: 0, width: 220, height: 34))
         sl.minimumValue = min; sl.maximumValue = max; sl.value = value
-        sl.tintColor = pal.text; sl.thumbTintColor = pal.bg
+        // La perilla iba pintada del color del fondo: quedaba invisible y el control parecia una raya.
+        sl.tintColor = pal.text; sl.thumbTintColor = pal.text
         sl.addTarget(self, action: action, for: .valueChanged)
         return sl
     }
@@ -127,7 +132,7 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     @objc private func fontSizeChanged(_ s: UISlider) { Settings.shared.fontSize = Double(s.value.rounded()) }
     @objc private func lineHeightChanged(_ s: UISlider) { Settings.shared.lineHeight = Double((s.value * 20).rounded() / 20) }
     @objc private func preachSizeChanged(_ s: UISlider) { Settings.shared.preachFontSize = Double(s.value.rounded()) }
-    @objc private func themeChanged(_ s: UISegmentedControl) { Settings.shared.theme = [ThemeMode.light, .sepia, .dark][s.selectedSegmentIndex] }
+    @objc private func themeChanged(_ s: UISegmentedControl) { Settings.shared.theme = [ThemeMode.light, .sepia][s.selectedSegmentIndex] }
     @objc private func pinToggled(_ s: UISwitch) { Settings.shared.pinEnabled = s.isOn }
     @objc private func touchToggled(_ s: UISwitch) { Settings.shared.touchIDEnabled = s.isOn }
 

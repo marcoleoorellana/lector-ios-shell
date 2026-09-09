@@ -169,7 +169,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         navigationController?.navigationBar.tintColor = pal.text
         navigationController?.navigationBar.largeTitleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(34, weight: .bold)]
         navigationController?.navigationBar.titleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(17, weight: .semibold)]
-        navigationController?.navigationBar.barStyle = Settings.shared.theme == .dark ? .black : .default
+        navigationController?.navigationBar.barStyle = .default
         search.searchBar.tintColor = pal.text
         continueTitle.textColor = pal.text; continueMeta.textColor = pal.secondary
         continueBar.backgroundColor = pal.hairline; continueFill.backgroundColor = pal.text

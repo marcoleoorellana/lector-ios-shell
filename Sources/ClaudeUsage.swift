@@ -217,7 +217,7 @@ final class ClaudeViewController: UIViewController {
         navigationController?.navigationBar.tintColor = pal.text
         navigationController?.navigationBar.largeTitleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(34, weight: .bold)]
         navigationController?.navigationBar.titleTextAttributes = [.foregroundColor: pal.text, .font: Fonts.ui(17, weight: .semibold)]
-        navigationController?.navigationBar.barStyle = Settings.shared.theme == .dark ? .black : .default
+        navigationController?.navigationBar.barStyle = .default
         (view.subviews.first as? UIScrollView)?.refreshControl?.tintColor = pal.secondary
         render()
     }
