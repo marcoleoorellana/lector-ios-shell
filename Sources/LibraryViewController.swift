@@ -56,6 +56,9 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
             UIBarButtonItem(title: "Ajustes", style: .plain, target: self, action: #selector(openSettings)),
             UIBarButtonItem(title: "Claude", style: .plain, target: self, action: #selector(openClaude))
         ]
+        // Sincronizar solo por pull-to-refresh no se descubre: el gesto no se ve en ningun lado.
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Actualizar", style: .plain,
+                                                           target: self, action: #selector(tapRefresh))
 
         search.searchResultsUpdater = self
         search.obscuresBackgroundDuringPresentation = false
@@ -201,6 +204,16 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
     }
 
     func updateSearchResults(for searchController: UISearchController) { filter() }
+
+    /// Mismo trabajo que el pull-to-refresh, pero disparado desde el boton visible.
+    @objc private func tapRefresh() {
+        if let rc = refreshControl, !rc.isRefreshing {
+            rc.beginRefreshing()
+            // beginRefreshing() no desplaza la tabla: sin esto el spinner queda fuera de pantalla.
+            tableView.setContentOffset(CGPoint(x: 0, y: tableView.contentOffset.y - rc.frame.height), animated: true)
+        }
+        pullRefresh()
+    }
 
     @objc private func pullRefresh() {
         ContentStore.shared.refresh { result in

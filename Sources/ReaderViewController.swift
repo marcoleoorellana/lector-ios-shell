@@ -44,6 +44,10 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.allowsBackForwardNavigationGestures = false
+        // Translucido solo mientras carga, para que se vea el fondo del tema en vez de blanco.
+        // En cuanto hay contenido pasa a opaco: con la vista translucida el compositor mezcla
+        // con alfa los 3,1 MP de la pantalla Retina en cada cuadro, y en el A7 eso es lo que
+        // hace que el scroll se sienta pesado y gaste bateria de mas.
         webView.isOpaque = false
         view.addSubview(webView)
 
@@ -74,7 +78,17 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         applyTheme()
         ignoreProgressUntil = Date().addingTimeInterval(0.8)
         load()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateStatus() }
+        startTimer()
+    }
+
+    /// Leyendo alcanza con refrescar de a poco; el segundero solo hace falta como cronometro de
+    /// predicacion. A 1 Hz permanente el CPU nunca baja a reposo profundo y se nota en la bateria.
+    private func startTimer() {
+        timer?.invalidate()
+        let cada: TimeInterval = preaching ? 1 : 15
+        timer = Timer.scheduledTimer(withTimeInterval: cada, repeats: true) { [weak self] _ in self?.updateStatus() }
+        timer?.tolerance = preaching ? 0.1 : 5   // deja que el sistema agrupe despertares
+        updateStatus()
     }
 
     /// El userContentController retiene al handler: hay que soltarlo al salir, no solo en deinit.
@@ -114,6 +128,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Ya hay contenido pintado: se puede componer opaco sin riesgo de destello.
+        webView.isOpaque = true
         if debugPreach && !preaching { debugPreach = false; togglePreach() }
         let p = ContentStore.shared.progress(for: doc.id)
         // También se restaura el final (p ≥ 0.97): un doc terminado se abre donde quedó, no arriba.
@@ -159,7 +175,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
     private func updateStatus() {
         let s = Int(Date().timeIntervalSince(started))
-        let clock = String(format: "%02d:%02d", s / 60, s % 60)
+        // Predicando importa el segundo; leyendo, no: mostrar minutos permite refrescar 15x menos.
+        let clock = preaching ? String(format: "%02d:%02d", s / 60, s % 60) : "\(s / 60) min"
         let pct = "\(Int(progress * 100))%"
         statusLabel.text = "\(clock) · \(pct)"
         statusLabel.sizeToFit()
@@ -192,6 +209,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         if preaching { preachStarted = Date() }
         updateStatus()
         navigationController?.setNavigationBarHidden(preaching, animated: true)
+        startTimer()
         UIView.animate(withDuration: 0.2) { self.preachLabel.alpha = self.preaching ? 1 : 0 }
         setNeedsStatusBarAppearanceUpdate()
         webView.evaluateJavaScript("document.body.classList.toggle('preach', \(preaching))", completionHandler: nil)
