@@ -215,12 +215,54 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         pullRefresh()
     }
 
-    @objc private func pullRefresh() {
-        ContentStore.shared.refresh { result in
+    @objc private func pullRefresh() { sync(silent: false) }
+
+    /// Un solo boton, manual (el usuario no quiere nada automatico): 1) el sitio compara Drive
+    /// con lo publicado y, si hay cambios, convierte y publica (~1 min); 2) se espera; 3) se baja.
+    private var syncing = false
+    private func sync(silent: Bool) {
+        guard !syncing else { return }
+        syncing = true
+        let done: (Result<Int, Error>) -> Void = { result in
+            self.syncing = false
             self.refreshControl?.endRefreshing()
+            self.reload()
             switch result {
-            case .success(let n): self.toast(n == 0 ? "Sin cambios" : "\(n) documento(s) actualizados")
-            case .failure(let e): self.toast(e.localizedDescription)
+            case .success(let n):
+                if n > 0 { self.toast("\(n) documento(s) actualizados") }
+                else if !silent { self.toast("Todo al dia") }
+            case .failure(let e): if !silent { self.toast(e.localizedDescription) }
+            }
+        }
+        ContentStore.shared.checkPublish { state in
+            guard let state = state, !state.upToDate else {
+                ContentStore.shared.refresh(completion: done)
+                return
+            }
+            if !state.building {
+                // Drive tiene cambios pero no se pudo disparar (p. ej. fallo repetido): se baja lo que hay.
+                if !silent { self.toast(state.error ?? "No se pudo publicar") }
+                ContentStore.shared.refresh(completion: done)
+                return
+            }
+            if !silent { self.toast("Publicando tus cambios de Google Docs...") }
+            self.waitForPublish(attempts: 30) { published in
+                if !published && !silent { self.toast("La publicacion sigue en curso; proba en un minuto") }
+                ContentStore.shared.refresh(completion: done)
+            }
+        }
+    }
+
+    /// Consulta cada 5 s hasta que el sitio diga que esta al dia (maximo `attempts` veces).
+    private func waitForPublish(attempts: Int, completion: @escaping (Bool) -> Void) {
+        guard attempts > 0 else { completion(false); return }
+        let secs = 5 * (31 - attempts)
+        footer.text = "    Publicando desde Google Docs... \(secs) s"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+            ContentStore.shared.checkPublish { state in
+                if let s = state, s.upToDate { completion(true) }
+                else if let s = state, !s.building { completion(false) }
+                else { self.waitForPublish(attempts: attempts - 1, completion: completion) }
             }
         }
     }

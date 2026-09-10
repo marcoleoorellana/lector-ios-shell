@@ -62,6 +62,29 @@ final class ContentStore {
     func progress(for id: String) -> Double { return UserDefaults.standard.double(forKey: "progress." + id) }
     func setProgress(_ p: Double, for id: String) { UserDefaults.standard.set(min(max(p, 0), 1), forKey: "progress." + id) }
 
+    /// Estado de /api/auto-publish: el sitio compara Google Drive con lo publicado y,
+    /// si hay cambios, dispara el build solo. `nil` si no se pudo consultar (sin internet,
+    /// origen viejo sin ese endpoint): en ese caso se sigue con la descarga normal.
+    struct PublishState { let upToDate: Bool; let building: Bool; let error: String? }
+
+    func checkPublish(completion: @escaping (PublishState?) -> Void) {
+        let base = Settings.shared.contentBaseURL
+        guard let baseURL = URL(string: base), !base.isEmpty else { completion(nil); return }
+        var req = URLRequest(url: baseURL.appendingPathComponent("api/auto-publish"))
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.timeoutInterval = 25
+        URLSession(configuration: .ephemeral).dataTask(with: req) { data, resp, _ in
+            var state: PublishState? = nil
+            if (resp as? HTTPURLResponse)?.statusCode == 200, let data = data,
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any], obj["ok"] as? Bool == true {
+                state = PublishState(upToDate: obj["upToDate"] as? Bool ?? true,
+                                     building: obj["building"] as? Bool ?? false,
+                                     error: obj["error"] as? String)
+            }
+            DispatchQueue.main.async { completion(state) }
+        }.resume()
+    }
+
     // MARK: sincronización remota (opcional): baja docs.json y los HTML que cambiaron
     func refresh(completion: @escaping (Result<Int, Error>) -> Void) {
         let base = Settings.shared.contentBaseURL
