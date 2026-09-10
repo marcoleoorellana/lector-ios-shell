@@ -54,10 +54,10 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         let s = Settings.shared
         switch name {
         case "Tamaño del texto":
-            cell.textLabel?.text = "Tamaño del texto · \(Int((s.textScale * 100).rounded())) %"
+            cell.detailTextLabel?.text = "\(Int((s.textScale * 100).rounded())) %"
             cell.accessoryView = slider(value: Float(s.textScale), min: 0.6, max: 2.0, action: #selector(fontSizeChanged(_:)))
         case "Interlineado":
-            cell.textLabel?.text = "Interlineado · \(Int((s.leadingScale * 100).rounded())) %"
+            cell.detailTextLabel?.text = "\(Int((s.leadingScale * 100).rounded())) %"
             cell.accessoryView = slider(value: Float(s.leadingScale), min: 0.7, max: 1.6, action: #selector(lineHeightChanged(_:)))
         case "Como en Docs":
             cell.selectionStyle = .default
@@ -137,7 +137,7 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         for (i, row) in sections[0].1.enumerated() where row == "Tamaño del texto" || row == "Interlineado" {
             if let cell = tableView.cellForRow(at: IndexPath(row: i, section: 0)) {
                 let s = Settings.shared
-                cell.textLabel?.text = row == "Tamaño del texto" ? "Tamaño del texto · \(Int((s.textScale * 100).rounded())) %" : "Interlineado · \(Int((s.leadingScale * 100).rounded())) %"
+                cell.detailTextLabel?.text = "\(Int(((row == "Tamaño del texto" ? s.textScale : s.leadingScale) * 100).rounded())) %"
             }
         }
     }

@@ -288,8 +288,9 @@ final class TypographyViewController: UIViewController {
     }
     private func refresh() {
         let s = Settings.shared
-        sizeLabel.text = "tamaño \(Int((s.textScale * 100).rounded())) %"
-        lhLabel.text = "interlineado \(Int((s.leadingScale * 100).rounded())) %"
+        // Solo el numero: con "tamaño"/"interlineado" delante se cortaba ("tamaño 10…").
+        sizeLabel.text = "\(Int((s.textScale * 100).rounded())) %"
+        lhLabel.text = "\(Int((s.leadingScale * 100).rounded())) %"
     }
     @objc private func lhDec() { Settings.shared.leadingScale -= 0.05; refresh(); onChange() }
     @objc private func lhInc() { Settings.shared.leadingScale += 0.05; refresh(); onChange() }
