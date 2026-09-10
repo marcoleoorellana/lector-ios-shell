@@ -33,10 +33,14 @@ final class ContentStore {
         if let data = try? Data(contentsOf: manifest), let list = try? JSONDecoder().decode([Doc].self, from: data) {
             docs = list
         }
-        let stylesURL = existing(syncDir.appendingPathComponent("styles.json")) ?? bundleDir.appendingPathComponent("styles.json")
-        if let data = try? Data(contentsOf: stylesURL),
-           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]] {
-            styles = obj
+        // Primero el sincronizado; si no existe o no es JSON valido (una version vieja guardaba
+        // el index.html del sitio con ese nombre), el del paquete.
+        for url in [syncDir.appendingPathComponent("styles.json"), bundleDir.appendingPathComponent("styles.json")] {
+            if let data = try? Data(contentsOf: url),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: [String: Any]], !obj.isEmpty {
+                styles = obj
+                break
+            }
         }
     }
 
@@ -127,7 +131,9 @@ final class ContentStore {
                 }
                 group.enter()
                 session.dataTask(with: baseURL.appendingPathComponent("styles.json")) { s, sResp, _ in
-                    if ((sResp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let s = s {
+                    // Solo si es JSON de verdad: Pages contesta index.html (200) a rutas inexistentes.
+                    if ((sResp as? HTTPURLResponse)?.statusCode ?? 0) == 200, let s = s,
+                       (try? JSONSerialization.jsonObject(with: s)) as? [String: Any] != nil {
                         try? s.write(to: self.syncDir.appendingPathComponent("styles.json"))
                     }
                     group.leave()
