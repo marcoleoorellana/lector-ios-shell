@@ -85,9 +85,10 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     /// predicacion. A 1 Hz permanente el CPU nunca baja a reposo profundo y se nota en la bateria.
     private func startTimer() {
         timer?.invalidate()
-        let cada: TimeInterval = preaching ? 1 : 15
-        timer = Timer.scheduledTimer(withTimeInterval: cada, repeats: true) { [weak self] _ in self?.updateStatus() }
-        timer?.tolerance = preaching ? 0.1 : 5   // deja que el sistema agrupe despertares
+        // Un segundo en los dos modos: es una etiqueta nativa, cuesta nada, y el usuario
+        // quiere VER que el reloj se mueve tambien leyendo.
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateStatus() }
+        timer?.tolerance = 0.1
         updateStatus()
     }
 
@@ -175,8 +176,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
 
     private func updateStatus() {
         let s = Int(Date().timeIntervalSince(started))
-        // Predicando importa el segundo; leyendo, no: mostrar minutos permite refrescar 15x menos.
-        let clock = preaching ? String(format: "%02d:%02d", s / 60, s % 60) : "\(s / 60) min"
+        let clock = String(format: "%02d:%02d", s / 60, s % 60)
         let pct = "\(Int(progress * 100))%"
         statusLabel.text = "\(clock) · \(pct)"
         statusLabel.sizeToFit()

@@ -50,8 +50,10 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Biblioteca"
-        navigationController?.navigationBar.prefersLargeTitles = true
-        navigationItem.largeTitleDisplayMode = .always
+        // Titulo fijo y compacto: el titulo grande de iOS se "esconde" al scrollear y al
+        // usuario le parece raro. Asi la barra queda quieta, limpia.
+        navigationController?.navigationBar.prefersLargeTitles = false
+        navigationItem.largeTitleDisplayMode = .never
         // "Actualizar" es EL boton de la app (en negrita, arriba a la derecha, donde cae el pulgar):
         // trae lo nuevo de Google Docs con un solo toque. Ajustes queda a la izquierda.
         navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Actualizar", style: .done,
@@ -83,7 +85,7 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        navigationController?.navigationBar.prefersLargeTitles = true
+        navigationController?.navigationBar.prefersLargeTitles = false
         applyTheme()
         updateContinue()
         tableView.reloadData()
@@ -256,8 +258,17 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         ])
     }
 
+    /// El banner vive en la vista del navigationController: al entrar a leer hay que esconderlo.
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        bannerHideWork?.cancel()
+        banner.isHidden = true; banner.alpha = 0
+    }
+
     /// `progress` 0...1 llena la linea. `done` lo deja un momento y lo esconde.
     private func showBanner(_ text: String, right: String = "", progress: Double, done: Bool = false) {
+        // Solo mientras la biblioteca esta al frente; si el usuario ya entro a un documento, nada.
+        guard navigationController?.topViewController === self else { return }
         installBanner()
         let pal = self.pal
         banner.backgroundColor = pal.bg
