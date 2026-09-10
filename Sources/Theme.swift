@@ -70,16 +70,18 @@ final class Settings {
     }
     var palette: Palette { return Palette.of(theme) }
 
-    /// Tamaño base del texto en px (el resto escala proporcional a Docs).
-    var fontSize: Double {
-        get { let v = d.double(forKey: "fontSize"); return v > 0 ? v : 19 }
-        set { d.set(min(max(newValue, 14), 30), forKey: "fontSize"); Settings.postTypography() }
+    /// Tamaño y interlineado son FACTORES sobre lo que dice Google Docs (styles.json):
+    /// 1.0 = exactamente como en Docs (12 pt de Docs = 12 pt fisicos en la pantalla del iPad).
+    var textScale: Double {
+        get { let v = d.double(forKey: "textScale"); return v > 0 ? v : 1.0 }
+        set { d.set(min(max(newValue, 0.6), 2.0), forKey: "textScale"); Settings.postTypography() }
     }
-    /// Interlineado (multiplicador). Docs usa 1.15; en pantalla 1.35 lee mejor.
-    var lineHeight: Double {
-        get { let v = d.double(forKey: "lineHeight"); return v > 0 ? v : 1.35 }
-        set { d.set(min(max(newValue, 1.1), 1.9), forKey: "lineHeight"); Settings.postTypography() }
+    var leadingScale: Double {
+        get { let v = d.double(forKey: "leadingScale"); return v > 0 ? v : 1.0 }
+        set { d.set(min(max(newValue, 0.7), 1.6), forKey: "leadingScale"); Settings.postTypography() }
     }
+    /// Boton "Como en Docs": vuelve a 1.0 / 1.0.
+    func resetTypography() { d.removeObject(forKey: "textScale"); d.removeObject(forKey: "leadingScale"); Settings.postTypography() }
     var preachFontSize: Double {
         get { let v = d.double(forKey: "preachFontSize"); return v > 0 ? v : 27 }
         set { d.set(min(max(newValue, 20), 40), forKey: "preachFontSize"); Settings.postTypography() }

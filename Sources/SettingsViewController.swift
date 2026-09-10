@@ -3,7 +3,7 @@ import UIKit
 final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     private var pal: Palette { return Settings.shared.palette }
     private let sections: [(String, [String])] = [
-        ("Lectura", ["Tamaño del texto", "Interlineado", "Tema"]),
+        ("Lectura", ["Tamaño del texto", "Interlineado", "Como en Docs", "Tema"]),
         ("Contenido", ["Origen (URL)", "Actualizar ahora"]),
         ("Seguridad", ["PIN al abrir", "Touch ID", "Cambiar PIN"]),
         ("Estado", ["Batería"]),
@@ -54,9 +54,14 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         let s = Settings.shared
         switch name {
         case "Tamaño del texto":
-            cell.accessoryView = slider(value: Float(s.fontSize), min: 14, max: 30, action: #selector(fontSizeChanged(_:)))
+            cell.textLabel?.text = "Tamaño del texto · \(Int((s.textScale * 100).rounded())) %"
+            cell.accessoryView = slider(value: Float(s.textScale), min: 0.6, max: 2.0, action: #selector(fontSizeChanged(_:)))
         case "Interlineado":
-            cell.accessoryView = slider(value: Float(s.lineHeight), min: 1.1, max: 1.9, action: #selector(lineHeightChanged(_:)))
+            cell.textLabel?.text = "Interlineado · \(Int((s.leadingScale * 100).rounded())) %"
+            cell.accessoryView = slider(value: Float(s.leadingScale), min: 0.7, max: 1.6, action: #selector(lineHeightChanged(_:)))
+        case "Como en Docs":
+            cell.selectionStyle = .default
+            cell.detailTextLabel?.text = "Vuelve tamaño e interlineado al 100 %, tal cual Google Docs"
         case "Tamaño en predicación":
             cell.accessoryView = slider(value: Float(s.preachFontSize), min: 20, max: 40, action: #selector(preachSizeChanged(_:)))
         case "Tema":
@@ -103,6 +108,8 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
                 case .failure(let e): self.toast(e.localizedDescription)
                 }
             }
+        case "Como en Docs":
+            Settings.shared.resetTypography(); tableView.reloadSections(IndexSet(integer: 0), with: .none); toast("Como en Google Docs")
         case "Batería":
             tableView.reloadRows(at: [indexPath], with: .none)
         case "Cambiar PIN":
@@ -124,8 +131,16 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         let sw = UISwitch(); sw.isOn = on; sw.onTintColor = pal.text; sw.addTarget(self, action: action, for: .valueChanged); return sw
     }
 
-    @objc private func fontSizeChanged(_ s: UISlider) { Settings.shared.fontSize = Double(s.value.rounded()) }
-    @objc private func lineHeightChanged(_ s: UISlider) { Settings.shared.lineHeight = Double((s.value * 20).rounded() / 20) }
+    @objc private func fontSizeChanged(_ s: UISlider) { Settings.shared.textScale = Double((s.value * 20).rounded() / 20); reloadLectura() }
+    @objc private func lineHeightChanged(_ s: UISlider) { Settings.shared.leadingScale = Double((s.value * 20).rounded() / 20); reloadLectura() }
+    private func reloadLectura() {
+        for (i, row) in sections[0].1.enumerated() where row == "Tamaño del texto" || row == "Interlineado" {
+            if let cell = tableView.cellForRow(at: IndexPath(row: i, section: 0)) {
+                let s = Settings.shared
+                cell.textLabel?.text = row == "Tamaño del texto" ? "Tamaño del texto · \(Int((s.textScale * 100).rounded())) %" : "Interlineado · \(Int((s.leadingScale * 100).rounded())) %"
+            }
+        }
+    }
     @objc private func preachSizeChanged(_ s: UISlider) { Settings.shared.preachFontSize = Double(s.value.rounded()) }
     @objc private func themeChanged(_ s: UISegmentedControl) { Settings.shared.theme = [ThemeMode.light, .sepia][s.selectedSegmentIndex] }
     @objc private func pinToggled(_ s: UISwitch) { Settings.shared.pinEnabled = s.isOn }

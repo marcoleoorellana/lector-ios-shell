@@ -223,7 +223,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
     @objc private func showTypography() {
         let vc = TypographyViewController { [weak self] in self?.pushCSSVars() }
         vc.modalPresentationStyle = .popover
-        vc.preferredContentSize = CGSize(width: 320, height: 250)
+        vc.preferredContentSize = CGSize(width: 320, height: 310)
         vc.popoverPresentationController?.barButtonItem = navigationItem.rightBarButtonItems?.last
         vc.popoverPresentationController?.delegate = self
         vc.popoverPresentationController?.backgroundColor = pal.bg
@@ -270,7 +270,13 @@ final class TypographyViewController: UIViewController {
         seg.tintColor = pal.text
         seg.addTarget(self, action: #selector(themeChanged(_:)), for: .valueChanged)
 
-        let stack = UIStackView(arrangedSubviews: [sizeRow, lhRow, seg]); stack.axis = .vertical; stack.spacing = 16
+        let reset = UIButton(type: .system)
+        reset.setTitle("Como en Docs", for: .normal); reset.titleLabel?.font = Fonts.ui(15, weight: .medium)
+        reset.tintColor = pal.text; reset.layer.borderWidth = 1; reset.layer.borderColor = pal.hairline.cgColor; reset.layer.cornerRadius = 8
+        reset.heightAnchor.constraint(equalToConstant: 40).isActive = true
+        reset.addTarget(self, action: #selector(resetDocs), for: .touchUpInside)
+
+        let stack = UIStackView(arrangedSubviews: [sizeRow, lhRow, reset, seg]); stack.axis = .vertical; stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -280,11 +286,16 @@ final class TypographyViewController: UIViewController {
         ])
         refresh()
     }
-    private func refresh() { sizeLabel.text = "\(Int(Settings.shared.fontSize)) px"; lhLabel.text = String(format: "interlineado %.2f", Settings.shared.lineHeight) }
-    @objc private func lhDec() { Settings.shared.lineHeight -= 0.05; refresh(); onChange() }
-    @objc private func lhInc() { Settings.shared.lineHeight += 0.05; refresh(); onChange() }
-    @objc private func dec() { Settings.shared.fontSize -= 1; refresh(); onChange() }
-    @objc private func inc() { Settings.shared.fontSize += 1; refresh(); onChange() }
+    private func refresh() {
+        let s = Settings.shared
+        sizeLabel.text = "tamaño \(Int((s.textScale * 100).rounded())) %"
+        lhLabel.text = "interlineado \(Int((s.leadingScale * 100).rounded())) %"
+    }
+    @objc private func lhDec() { Settings.shared.leadingScale -= 0.05; refresh(); onChange() }
+    @objc private func lhInc() { Settings.shared.leadingScale += 0.05; refresh(); onChange() }
+    @objc private func dec() { Settings.shared.textScale -= 0.05; refresh(); onChange() }
+    @objc private func inc() { Settings.shared.textScale += 0.05; refresh(); onChange() }
+    @objc private func resetDocs() { Settings.shared.resetTypography(); refresh(); onChange() }
     @objc private func themeChanged(_ s: UISegmentedControl) {
         Settings.shared.theme = [ThemeMode.light, .sepia][s.selectedSegmentIndex]
         dismiss(animated: true)
@@ -325,13 +336,22 @@ enum ReaderHTML {
         return out
     }()
 
+    /// 12 pt de Docs = 12 pt fisicos en el iPad: 1 pt = 1/72 in y la pantalla tiene 132 px CSS por pulgada.
+    static let pxPorPt = 132.0 / 72.0
+    /// Interlineado "sencillo" (100 %) de Docs = la altura natural de la fuente, ~1.2 del cuerpo.
+    static let lineaSencilla = 1.2
+
+    static func basePx(_ styles: [String: [String: Any]], _ s: Settings) -> Double {
+        return pt(styles, "NORMAL_TEXT", 11) * pxPorPt * s.textScale
+    }
+
     static func cssVarsJS(settings s: Settings, preach: Bool) -> String {
         let pal = s.palette
-        let base = preach ? s.preachFontSize : s.fontSize
+        let base = basePx(ContentStore.shared.styles, s)
         let alpha = 1.0
         return """
         (function(){var r=document.documentElement.style;
-        r.setProperty('--fs','\(base)px');r.setProperty('--lh','\(s.lineHeight)');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
+        r.setProperty('--fs','\(base)px');r.setProperty('--lhk','\(lineaSencilla * s.leadingScale)');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
         r.setProperty('--muted','\(pal.secondaryHex)');r.setProperty('--line','\(pal.hairlineHex)');r.setProperty('--tint','\(alpha)');})();
         """
     }
@@ -339,6 +359,18 @@ enum ReaderHTML {
     static func wrap(body: String, title: String, styles: [String: [String: Any]], settings s: Settings, preach: Bool) -> String {
         let pal = s.palette
         let normal = pt(styles, "NORMAL_TEXT", 11)
+        // Metricas de parrafo de Docs: interlineado en % y espacio antes/despues en pt.
+        func num(_ key: String, _ name: String, _ fb: Double) -> Double {
+            if let v = styles[key]?[name] as? Double { return v }
+            if let v = styles[key]?[name] as? Int { return Double(v) }
+            return fb
+        }
+        /// line-height y margenes de un estilo, en funcion de --fs (asi Aa los escala a todos).
+        func para(_ key: String, _ fbAbove: Double, _ fbBelow: Double) -> String {
+            let lh = num(key, "lineSpacing", 100) / 100
+            let above = num(key, "spaceAbovePt", fbAbove) / normal, below = num(key, "spaceBelowPt", fbBelow) / normal
+            return String(format: "line-height:calc(var(--lhk)*%.3f);margin:calc(var(--fs)*%.3f) 0 calc(var(--fs)*%.3f);", lh, above, below)
+        }
         // Escala: el texto normal de Docs (en pt) se ve a --fs px; los encabezados mantienen la proporción de Docs.
         func em(_ key: String, _ fb: Double) -> String {
             // Proporcion exacta de Google Docs (styles.json trae los pt reales de cada estilo).
@@ -350,12 +382,12 @@ enum ReaderHTML {
         }
         let css = """
         \(fontFaces)
-        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:1}
+        :root{--fs:\(basePx(styles, s))px;--lhk:\(lineaSencilla * s.leadingScale);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:1}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
-        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-hyphens:auto;hyphens:auto}
+        body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:calc(var(--lhk)*\(String(format: "%.3f", num("NORMAL_TEXT", "lineSpacing", 100) / 100)));-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-hyphens:auto;hyphens:auto}
         article{max-width:640px;margin:0 auto;padding:0 32px}
         body.preach article{max-width:720px}
-        p{margin:0 0 .55em}
+        p{\(para("NORMAL_TEXT", 0, 0))}
         p:empty,p.is-section-break{margin:0;height:.35em}
         li{margin:0 0 .15em}
         li>p{margin:0}
@@ -366,11 +398,16 @@ enum ReaderHTML {
         table{border-collapse:collapse;width:100%;font-size:.9em}
         td,th{border:1px solid var(--line);padding:.4em .6em;vertical-align:top}
         blockquote{margin:1em 0;padding-left:20px;border-left:2px solid var(--fg);color:var(--muted)}
-        h1,h2,h3,h4,h5,h6,p.doc-subtitle{margin:.9em 0 .3em;line-height:1.25;color:var(--fg)}
-        h5,h6,h6.heading-6{margin:.6em 0 .25em}
+        h1,h2,h3,h4,h5,h6,p.doc-subtitle{color:var(--fg)}
+        h1{\(para("TITLE", 0, 3))}
+        p.doc-subtitle{\(para("SUBTITLE", 0, 16))}
+        h2{\(para("HEADING_1", 20, 6))}
+        h3{\(para("HEADING_2", 18, 6))}
+        h4{\(para("HEADING_3", 16, 4))}
+        h5{\(para("HEADING_4", 14, 4))}
+        h6{\(para("HEADING_5", 12, 4))}
+        h6.heading-6{\(para("HEADING_6", 12, 4))}
         h1:first-child{margin-top:0}
-        h1+p.doc-subtitle,p.is-section-break+p.doc-subtitle,p.is-section-break+h2,p.is-section-break+h3,p.is-section-break+h4{margin-top:.3em}
-        h2+h3,h3+h4,h4+h5,h5+h6,h6+h6,h5+h5,h4+h4,h3+h3,h6+h5,h5+h4,h4+h3,p.doc-subtitle+h5,p.doc-subtitle+h6,p.doc-subtitle+h4{margin-top:.25em}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
         p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))}
         h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))}
