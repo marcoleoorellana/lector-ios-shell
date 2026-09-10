@@ -52,13 +52,12 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         title = "Biblioteca"
         navigationController?.navigationBar.prefersLargeTitles = true
         navigationItem.largeTitleDisplayMode = .always
-        navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: "Ajustes", style: .plain, target: self, action: #selector(openSettings)),
-            UIBarButtonItem(title: "Claude", style: .plain, target: self, action: #selector(openClaude))
-        ]
-        // Sincronizar solo por pull-to-refresh no se descubre: el gesto no se ve en ningun lado.
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Actualizar", style: .plain,
-                                                           target: self, action: #selector(tapRefresh))
+        // "Actualizar" es EL boton de la app (en negrita, arriba a la derecha, donde cae el pulgar):
+        // trae lo nuevo de Google Docs con un solo toque. Ajustes queda a la izquierda.
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "Actualizar", style: .done,
+                                                            target: self, action: #selector(tapRefresh))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Ajustes", style: .plain,
+                                                           target: self, action: #selector(openSettings))
 
         search.searchResultsUpdater = self
         search.obscuresBackgroundDuringPresentation = false
@@ -271,10 +270,6 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         let nav = UINavigationController(rootViewController: SettingsViewController())
         nav.modalPresentationStyle = .formSheet
         present(nav, animated: true)
-    }
-
-    @objc private func openClaude() {
-        navigationController?.pushViewController(ClaudeViewController(), animated: true)
     }
 
     @objc private func continueReading() {

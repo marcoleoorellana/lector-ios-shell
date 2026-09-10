@@ -7,7 +7,7 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         ("Predicación", ["Tamaño en predicación"]),
         ("Contenido", ["Origen (URL)", "Actualizar ahora"]),
         ("Seguridad", ["PIN al abrir", "Touch ID", "Cambiar PIN"]),
-        ("Estado", ["Batería", "Claude: borrar sessionKey"]),
+        ("Estado", ["Batería"]),
         ("Acerca", ["Versión"])
     ]
 
@@ -85,8 +85,6 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
         case "Batería":
             cell.selectionStyle = .default
             cell.textLabel?.text = Battery.summary(); cell.textLabel?.font = Fonts.mono(13); cell.textLabel?.numberOfLines = 2
-        case "Claude: borrar sessionKey":
-            cell.selectionStyle = .default
         case "Versión":
             let v = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
             cell.detailTextLabel?.text = "Lector 2.0 (\(v)) · iOS \(UIDevice.current.systemVersion)"
@@ -108,8 +106,6 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
             }
         case "Batería":
             tableView.reloadRows(at: [indexPath], with: .none)
-        case "Claude: borrar sessionKey":
-            Keychain.set("claudeSessionKey", nil); Keychain.set("claudeOrgUuid", nil); toast("sessionKey borrado")
         case "Cambiar PIN":
             let vc = PinViewController(mode: .set) { [weak self] in self?.toast("PIN actualizado") }
             present(UINavigationController(rootViewController: vc), animated: true)
