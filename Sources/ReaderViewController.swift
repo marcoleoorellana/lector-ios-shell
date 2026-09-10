@@ -30,7 +30,6 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         statusLabel.font = Fonts.mono(13); statusLabel.textAlignment = .center
         navigationItem.titleView = statusLabel
         navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(title: "Predicar", style: .plain, target: self, action: #selector(togglePreach)),
             UIBarButtonItem(title: "Aa", style: .plain, target: self, action: #selector(showTypography))
         ]
         navigationItem.rightBarButtonItems?.forEach { $0.setTitleTextAttributes([.font: Fonts.ui(17, weight: .medium)], for: .normal) }
@@ -119,7 +118,8 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         }
     }
 
-    override var prefersStatusBarHidden: Bool { return preaching }
+    // Leyendo no hace falta ver hora, fecha ni bateria: la barra de estado va escondida siempre.
+    override var prefersStatusBarHidden: Bool { return true }
     override var prefersHomeIndicatorAutoHidden: Bool { return preaching }
 
     private func load() {
@@ -328,7 +328,7 @@ enum ReaderHTML {
     static func cssVarsJS(settings s: Settings, preach: Bool) -> String {
         let pal = s.palette
         let base = preach ? s.preachFontSize : s.fontSize
-        let alpha = preach ? 0.65 : 0.50
+        let alpha = 1.0
         return """
         (function(){var r=document.documentElement.style;
         r.setProperty('--fs','\(base)px');r.setProperty('--lh','\(s.lineHeight)');r.setProperty('--bg','\(pal.bgHex)');r.setProperty('--fg','\(pal.textHex)');
@@ -341,8 +341,8 @@ enum ReaderHTML {
         let normal = pt(styles, "NORMAL_TEXT", 11)
         // Escala: el texto normal de Docs (en pt) se ve a --fs px; los encabezados mantienen la proporción de Docs.
         func em(_ key: String, _ fb: Double) -> String {
-            let ratio = pt(styles, key, fb) / normal
-            return String(format: "%.3fem", 1 + (ratio - 1) * 0.55)
+            // Proporcion exacta de Google Docs (styles.json trae los pt reales de cada estilo).
+            return String(format: "%.3fem", pt(styles, key, fb) / normal)
         }
         func deco(_ key: String, bold: Bool, italic: Bool, underline: Bool) -> String {
             let b = flag(styles, key, "bold", bold), i = flag(styles, key, "italic", italic), u = flag(styles, key, "underline", underline)
@@ -350,7 +350,7 @@ enum ReaderHTML {
         }
         let css = """
         \(fontFaces)
-        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:\(preach ? 0.65 : 0.50)}
+        :root{--fs:\(preach ? s.preachFontSize : s.fontSize)px;--lh:\(s.lineHeight);--bg:\(pal.bgHex);--fg:\(pal.textHex);--muted:\(pal.secondaryHex);--line:\(pal.hairlineHex);--tint:1}
         html{background:var(--bg);-webkit-text-size-adjust:100%}
         body{margin:0;padding:28px 0 120px;background:var(--bg);color:var(--fg);font-family:Figtree,-apple-system,Helvetica,sans-serif;font-size:var(--fs);line-height:var(--lh);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;-webkit-hyphens:auto;hyphens:auto}
         article{max-width:640px;margin:0 auto;padding:0 32px}
@@ -373,23 +373,26 @@ enum ReaderHTML {
         h2+h3,h3+h4,h4+h5,h5+h6,h6+h6,h5+h5,h4+h4,h3+h3,h6+h5,h5+h4,h4+h3,p.doc-subtitle+h5,p.doc-subtitle+h6,p.doc-subtitle+h4{margin-top:.25em}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
         p.doc-subtitle{font-size:\(em("SUBTITLE", 15));\(deco("SUBTITLE", bold: false, italic: true, underline: false))}
-        h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))padding-left:14px;border-left:4px solid var(--muted)}
+        h2{font-size:\(em("HEADING_1", 20));\(deco("HEADING_1", bold: true, italic: true, underline: true))}
         h3{font-size:\(em("HEADING_2", 16));\(deco("HEADING_2", bold: true, italic: false, underline: false))}
         h4{font-size:\(em("HEADING_3", 14));\(deco("HEADING_3", bold: true, italic: true, underline: false))}
         h5{font-size:\(em("HEADING_4", 12));\(deco("HEADING_4", bold: false, italic: true, underline: false))}
         h6{font-size:\(em("HEADING_5", 11));\(deco("HEADING_5", bold: false, italic: false, underline: false))}
         h6.heading-6{font-size:\(em("HEADING_6", 11));\(deco("HEADING_6", bold: false, italic: false, underline: false))}
-        /* Resaltados de Docs: mismo tono, calmado, con subrayado del mismo color. */
-        /* Sin subrayado: en Google Docs el resaltado es solo el fondo. */
-        mark{color:inherit;padding:0 2px;border-radius:2px;background:transparent}
-        mark.tone-yellow{background:rgba(255,243,155,var(--tint))}
-        mark.tone-cyan{background:rgba(189,247,255,var(--tint))}
-        mark.tone-lime{background:rgba(221,255,116,var(--tint))}
-        mark.tone-lavender{background:rgba(217,216,255,var(--tint))}
-        mark.tone-subtitle,mark.tone-peach{background:rgba(255,226,191,var(--tint))}
-        mark.tone-pink{background:rgba(255,210,216,var(--tint))}
-        mark.tone-title{background:rgba(203,255,215,var(--tint))}
-        h2 mark,h2 mark[style]{background:transparent!important}
+        /* Resaltados: los colores EXACTOS de los estilos del usuario en Google Docs
+           (Titulo #acfdd0, Subtitulo #fdd3a7, Enc.1 #434343 con texto claro, Enc.2 #97fffc,
+           Enc.3 #d0ff7d, Enc.4 #ffb2b2, Enc.5 #d8d0ff, Enc.6 #fff399). Sin subrayado: en Docs
+           el resaltado es solo el fondo. --tint permite aguarlos; 1 = tal cual Docs. */
+        mark{color:inherit;padding:0 3px;border-radius:2px;background:transparent}
+        mark.tone-yellow{background:rgba(255,243,153,var(--tint))}
+        mark.tone-cyan{background:rgba(151,255,252,var(--tint))}
+        mark.tone-lime{background:rgba(208,255,125,var(--tint))}
+        mark.tone-lavender{background:rgba(216,208,255,var(--tint))}
+        mark.tone-subtitle,mark.tone-peach{background:rgba(253,211,167,var(--tint))}
+        mark.tone-pink{background:rgba(255,178,178,var(--tint))}
+        mark.tone-title{background:rgba(172,253,208,var(--tint))}
+        /* Encabezado 1 en Docs: caja gris oscura con texto claro. */
+        h2 mark,h2 mark[style]{background:#434343!important;color:#d0e0e3;padding:0 8px}
         h2 span[style],h1 span[style]{color:inherit!important}
         .align-center{text-align:center}
         """

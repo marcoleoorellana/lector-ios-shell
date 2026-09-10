@@ -4,7 +4,6 @@ final class SettingsViewController: UITableViewController, UITextFieldDelegate {
     private var pal: Palette { return Settings.shared.palette }
     private let sections: [(String, [String])] = [
         ("Lectura", ["Tamaño del texto", "Interlineado", "Tema"]),
-        ("Predicación", ["Tamaño en predicación"]),
         ("Contenido", ["Origen (URL)", "Actualizar ahora"]),
         ("Seguridad", ["PIN al abrir", "Touch ID", "Cambiar PIN"]),
         ("Estado", ["Batería"]),
