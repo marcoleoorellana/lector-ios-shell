@@ -95,6 +95,11 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         // Depuración: Documents/snap.open con un id de doc abre ese documento (y snap.preach entra en predicación).
         guard !debugOpened else { return }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        // Depuración: Documents/snap.sync equivale a tocar "Actualizar" (para capturar el banner).
+        if FileManager.default.fileExists(atPath: docs.appendingPathComponent("snap.sync").path) {
+            debugOpened = true; try? FileManager.default.removeItem(at: docs.appendingPathComponent("snap.sync"))
+            tapRefresh(); return
+        }
         if let id = try? String(contentsOf: docs.appendingPathComponent("snap.open"), encoding: .utf8),
            let doc = ContentStore.shared.doc(id: id.trimmingCharacters(in: .whitespacesAndNewlines)) {
             debugOpened = true
