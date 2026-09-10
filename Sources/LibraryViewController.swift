@@ -70,8 +70,6 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         tableView.separatorStyle = .none
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 84
-        refreshControl = UIRefreshControl()
-        refreshControl?.addTarget(self, action: #selector(pullRefresh), for: .valueChanged)
 
         buildHeader()
         footer.font = Fonts.mono(12); footer.textAlignment = .left
@@ -178,7 +176,6 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
         }
         if let b = header.viewWithTag(99) as? UIButton { b.backgroundColor = pal.text; b.setTitleColor(pal.bg, for: .normal) }
         footer.textColor = pal.secondary
-        refreshControl?.tintColor = pal.secondary
         tableView.reloadData()
     }
 
@@ -204,17 +201,81 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
 
     func updateSearchResults(for searchController: UISearchController) { filter() }
 
-    /// Mismo trabajo que el pull-to-refresh, pero disparado desde el boton visible.
-    @objc private func tapRefresh() {
-        if let rc = refreshControl, !rc.isRefreshing {
-            rc.beginRefreshing()
-            // beginRefreshing() no desplaza la tabla: sin esto el spinner queda fuera de pantalla.
-            tableView.setContentOffset(CGPoint(x: 0, y: tableView.contentOffset.y - rc.frame.height), animated: true)
-        }
-        pullRefresh()
+    @objc private func tapRefresh() { sync(silent: false) }
+
+    // MARK: banner de progreso (debajo de la barra, no mueve la lista)
+    // Muestra los tres pasos con una linea que se va llenando: revisar Google Docs,
+    // publicar (el sitio convierte, ~1 min) y bajar al iPad.
+    private let banner = UIView()
+    private let bannerText = UILabel()
+    private let bannerRight = UILabel()
+    private let bannerFill = UIView()
+    private let bannerTrack = UIView()
+    private var bannerFillWidth: NSLayoutConstraint?
+    private var bannerInstalled = false
+    private var bannerHideWork: DispatchWorkItem?
+
+    private func installBanner() {
+        guard !bannerInstalled, let host = navigationController?.view, let bar = navigationController?.navigationBar else { return }
+        bannerInstalled = true
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        banner.isHidden = true; banner.alpha = 0
+        bannerText.font = Fonts.ui(14, weight: .medium)
+        bannerRight.font = Fonts.mono(12); bannerRight.textAlignment = .right
+        bannerRight.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [bannerText, bannerRight]); row.axis = .horizontal; row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+        bannerTrack.translatesAutoresizingMaskIntoConstraints = false
+        bannerFill.translatesAutoresizingMaskIntoConstraints = false
+        bannerTrack.addSubview(bannerFill)
+        banner.addSubview(row); banner.addSubview(bannerTrack)
+        host.addSubview(banner)
+        let w = bannerFill.widthAnchor.constraint(equalTo: bannerTrack.widthAnchor, multiplier: 0.001)
+        bannerFillWidth = w
+        NSLayoutConstraint.activate([
+            banner.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            banner.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            banner.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            row.topAnchor.constraint(equalTo: banner.topAnchor, constant: 12),
+            row.leadingAnchor.constraint(equalTo: banner.leadingAnchor, constant: 32),
+            row.trailingAnchor.constraint(equalTo: banner.trailingAnchor, constant: -32),
+            bannerTrack.topAnchor.constraint(equalTo: row.bottomAnchor, constant: 10),
+            bannerTrack.leadingAnchor.constraint(equalTo: banner.leadingAnchor),
+            bannerTrack.trailingAnchor.constraint(equalTo: banner.trailingAnchor),
+            bannerTrack.heightAnchor.constraint(equalToConstant: 2),
+            bannerTrack.bottomAnchor.constraint(equalTo: banner.bottomAnchor),
+            bannerFill.leadingAnchor.constraint(equalTo: bannerTrack.leadingAnchor),
+            bannerFill.topAnchor.constraint(equalTo: bannerTrack.topAnchor),
+            bannerFill.bottomAnchor.constraint(equalTo: bannerTrack.bottomAnchor),
+            w
+        ])
     }
 
-    @objc private func pullRefresh() { sync(silent: false) }
+    /// `progress` 0...1 llena la linea. `done` lo deja un momento y lo esconde.
+    private func showBanner(_ text: String, right: String = "", progress: Double, done: Bool = false) {
+        installBanner()
+        let pal = self.pal
+        banner.backgroundColor = pal.bg
+        bannerText.textColor = pal.text; bannerRight.textColor = pal.secondary
+        bannerTrack.backgroundColor = pal.hairline; bannerFill.backgroundColor = pal.text
+        bannerText.text = text; bannerRight.text = right
+        bannerHideWork?.cancel()
+        if banner.isHidden { banner.isHidden = false; navigationController?.view.layoutIfNeeded() }
+        if let old = bannerFillWidth {
+            old.isActive = false
+            let w = bannerFill.widthAnchor.constraint(equalTo: bannerTrack.widthAnchor, multiplier: CGFloat(max(0.001, min(1, progress))))
+            w.isActive = true; bannerFillWidth = w
+        }
+        UIView.animate(withDuration: 0.35) { self.banner.alpha = 1; self.navigationController?.view.layoutIfNeeded() }
+        if done {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                UIView.animate(withDuration: 0.4, animations: { self.banner.alpha = 0 }) { _ in self.banner.isHidden = true }
+            }
+            bannerHideWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: work)
+        }
+    }
 
     /// Un solo boton, manual (el usuario no quiere nada automatico): 1) el sitio compara Drive
     /// con lo publicado y, si hay cambios, convierte y publica (~1 min); 2) se espera; 3) se baja.
@@ -222,46 +283,47 @@ final class LibraryViewController: UITableViewController, UISearchResultsUpdatin
     private func sync(silent: Bool) {
         guard !syncing else { return }
         syncing = true
+        showBanner("Revisando Google Docs", right: "1/3", progress: 0.08)
         let done: (Result<Int, Error>) -> Void = { result in
             self.syncing = false
-            self.refreshControl?.endRefreshing()
             self.reload()
             switch result {
             case .success(let n):
-                if n > 0 { self.toast("\(n) documento(s) actualizados") }
-                else if !silent { self.toast("Todo al dia") }
-            case .failure(let e): if !silent { self.toast(e.localizedDescription) }
+                self.showBanner(n == 0 ? "Todo al dia" : "Listo · \(n) documento(s) nuevos", right: "", progress: 1, done: true)
+            case .failure(let e):
+                self.showBanner(e.localizedDescription, right: "", progress: 1, done: true)
             }
         }
+        let download = {
+            self.showBanner("Bajando al iPad", right: "3/3", progress: 0.9)
+            ContentStore.shared.refresh(completion: done)
+        }
         ContentStore.shared.checkPublish { state in
-            guard let state = state, !state.upToDate else {
-                ContentStore.shared.refresh(completion: done)
-                return
-            }
+            guard let state = state, !state.upToDate else { download(); return }
             if !state.building {
                 // Drive tiene cambios pero no se pudo disparar (p. ej. fallo repetido): se baja lo que hay.
-                if !silent { self.toast(state.error ?? "No se pudo publicar") }
-                ContentStore.shared.refresh(completion: done)
+                self.showBanner(state.error ?? "No se pudo publicar", right: "", progress: 0.3)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: download)
                 return
             }
-            if !silent { self.toast("Publicando tus cambios de Google Docs...") }
-            self.waitForPublish(attempts: 30) { published in
-                if !published && !silent { self.toast("La publicacion sigue en curso; proba en un minuto") }
-                ContentStore.shared.refresh(completion: done)
+            self.waitForPublish(started: Date(), attempts: 30) { published in
+                if !published { self.showBanner("Sigue publicando; proba de nuevo en un minuto", right: "", progress: 0.85) }
+                download()
             }
         }
     }
 
     /// Consulta cada 5 s hasta que el sitio diga que esta al dia (maximo `attempts` veces).
-    private func waitForPublish(attempts: Int, completion: @escaping (Bool) -> Void) {
+    /// La linea avanza con el tiempo (un build tarda ~1 min) entre 15% y 85%.
+    private func waitForPublish(started: Date, attempts: Int, completion: @escaping (Bool) -> Void) {
         guard attempts > 0 else { completion(false); return }
-        let secs = 5 * (31 - attempts)
-        footer.text = "    Publicando desde Google Docs... \(secs) s"
+        let secs = Int(Date().timeIntervalSince(started))
+        showBanner("Publicando en el sitio (tarda un minuto)", right: "2/3 · \(secs) s", progress: 0.15 + 0.7 * min(1, Double(secs) / 60))
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
             ContentStore.shared.checkPublish { state in
                 if let s = state, s.upToDate { completion(true) }
                 else if let s = state, !s.building { completion(false) }
-                else { self.waitForPublish(attempts: attempts - 1, completion: completion) }
+                else { self.waitForPublish(started: started, attempts: attempts - 1, completion: completion) }
             }
         }
     }
