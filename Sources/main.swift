@@ -8,7 +8,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        application.isIdleTimerDisabled = true // leer y predicar sin que la pantalla se apague
+        // OJO: NO deshabilitar el idle timer para toda la app. Asi estaba, y con la app al frente
+        // la pantalla no se apagaba NUNCA (una noche entera al 80 % de brillo = 26 % de bateria).
+        // Solo el lector la mantiene despierta, y por un rato desde el ultimo toque (ReaderViewController).
         let nav = UINavigationController(rootViewController: LibraryViewController())
         nav.navigationBar.isTranslucent = false
         nav.navigationBar.shadowImage = UIImage()

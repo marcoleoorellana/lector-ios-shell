@@ -107,11 +107,31 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         navigationController?.navigationBar.prefersLargeTitles = false
         navigationController?.navigationBar.sizeToFit()
         pushCSSVars()
+        keepAwake()
+    }
+
+    // MARK: pantalla despierta mientras se lee, pero no para siempre
+    // Sin tocar nada durante 20 min se devuelve el control al bloqueo automatico de iOS:
+    // un documento que quedo abierto no puede vaciar la bateria de noche.
+    private static let despiertoMinutos: TimeInterval = 20 * 60
+    private var awakeTimer: Timer?
+    private func keepAwake() {
+        UIApplication.shared.isIdleTimerDisabled = true
+        awakeTimer?.invalidate()
+        awakeTimer = Timer.scheduledTimer(withTimeInterval: ReaderViewController.despiertoMinutos, repeats: false) { _ in
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        awakeTimer?.tolerance = 60
+    }
+    private func letSleep() {
+        awakeTimer?.invalidate(); awakeTimer = nil
+        UIApplication.shared.isIdleTimerDisabled = false
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         if isMovingFromParent || isBeingDismissed {
+            letSleep()
             exitPreachIfNeeded()
             navigationController?.navigationBar.prefersLargeTitles = true
             teardown()
@@ -152,7 +172,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         switch type {
         case "progress":
-            if (body["touched"] as? Bool) == true { userInteracted = true }
+            if (body["touched"] as? Bool) == true { userInteracted = true; keepAwake() }
             // Sin interacción: ni el reporte inicial ni un doc más corto que el viewport pueden tocar el progreso.
             guard userInteracted || Date() >= ignoreProgressUntil else { return }
             let maxScroll = (body["max"] as? Double) ?? 1
@@ -161,6 +181,7 @@ final class ReaderViewController: UIViewController, WKNavigationDelegate, WKScri
             ContentStore.shared.setProgress(progress, for: doc.id)
             updateStatus()
         case "tap":
+            keepAwake()
             if preaching {
                 let y = (body["y"] as? Double) ?? 0, h = (body["h"] as? Double) ?? 1
                 webView.evaluateJavaScript("window.__lectorPage(\(y < h * 0.3 ? -1 : 1))", completionHandler: nil)
