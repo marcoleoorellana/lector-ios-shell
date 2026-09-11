@@ -410,7 +410,7 @@ enum ReaderHTML {
         article{max-width:640px;margin:0 auto;padding:0 32px}
         body.preach article{max-width:720px}
         p{\(para("NORMAL_TEXT", 0, 0))}
-        p:empty,p.is-section-break{margin:0;height:.35em}
+        p:empty,p.is-section-break{margin:0;height:1em}
         li{margin:0 0 .15em}
         li>p{margin:0}
         ul,ol{margin:.2em 0 .6em;padding-left:1.25em}
