@@ -9,6 +9,9 @@ struct Doc: Codable {
     let updated: String?
     let modifiedTime: String?
     let minutes: Int?
+    /// Hash del HTML convertido. Cambia también cuando cambia el conversor
+    /// (aunque el doc no se edite), así la app re-baja el HTML regenerado.
+    let hash: String?
 }
 
 /// Contenido: docs.json + docs/*.html + styles.json.
@@ -112,6 +115,12 @@ final class ContentStore {
                 let changed = remote.filter { d in
                     guard self.safe(d.path) else { return false }
                     guard let k = known[d.id] else { return true }
+                    // Con hash: se re-baja si cambió el HTML generado (edición del doc
+                    // O cambio de código del conversor). Sin hash (manifiesto viejo),
+                    // cae a la fecha del doc.
+                    if let h = d.hash {
+                        return k.hash != h || !self.fm.fileExists(atPath: self.syncDir.appendingPathComponent(d.path).path)
+                    }
                     return k.modifiedTime != d.modifiedTime || !self.fm.fileExists(atPath: self.syncDir.appendingPathComponent(d.path).path)
                 }
                 let group = DispatchGroup()
