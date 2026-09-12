@@ -394,9 +394,11 @@ enum ReaderHTML {
             return String(format: "line-height:calc(var(--lhk)*%.3f);margin:calc(var(--fs)*%.3f) 0 calc(var(--fs)*%.3f);", lh, above, below)
         }
         // Escala: el texto normal de Docs (en pt) se ve a --fs px; los encabezados mantienen la proporción de Docs.
+        // El mínimo es el de letra común (1.0em): ningún encabezado puede ser más chico que el texto normal.
         func em(_ key: String, _ fb: Double) -> String {
             // Proporcion exacta de Google Docs (styles.json trae los pt reales de cada estilo).
-            return String(format: "%.3fem", pt(styles, key, fb) / normal)
+            let ratio = pt(styles, key, fb) / normal
+            return String(format: "%.3fem", max(1.0, ratio))
         }
         func deco(_ key: String, bold: Bool, italic: Bool, underline: Bool) -> String {
             let b = flag(styles, key, "bold", bold), i = flag(styles, key, "italic", italic), u = flag(styles, key, "underline", underline)
@@ -427,7 +429,7 @@ enum ReaderHTML {
         h3{\(para("HEADING_2", 18, 6))}
         h4{\(para("HEADING_3", 16, 4))}
         h5{\(para("HEADING_4", 14, 4))}
-        h6{\(para("HEADING_5", 12, 4))}
+        h6,h6.heading-5{\(para("HEADING_5", 12, 4))}
         h6.heading-6{\(para("HEADING_6", 12, 4))}
         h1:first-child{margin-top:0}
         h1{font-size:\(em("TITLE", 26));\(deco("TITLE", bold: false, italic: true, underline: false))}
@@ -436,7 +438,7 @@ enum ReaderHTML {
         h3{font-size:\(em("HEADING_2", 16));\(deco("HEADING_2", bold: true, italic: false, underline: false))}
         h4{font-size:\(em("HEADING_3", 14));\(deco("HEADING_3", bold: true, italic: true, underline: false))}
         h5{font-size:\(em("HEADING_4", 12));\(deco("HEADING_4", bold: false, italic: true, underline: false))}
-        h6{font-size:\(em("HEADING_5", 11));\(deco("HEADING_5", bold: false, italic: false, underline: false))}
+        h6,h6.heading-5{font-size:\(em("HEADING_5", 11));\(deco("HEADING_5", bold: false, italic: false, underline: false))}
         h6.heading-6{font-size:\(em("HEADING_6", 11));\(deco("HEADING_6", bold: false, italic: false, underline: false))}
         /* Resaltados: los colores EXACTOS de los estilos del usuario en Google Docs
            (Titulo #acfdd0, Subtitulo #fdd3a7, Enc.1 #434343 con texto claro, Enc.2 #97fffc,
